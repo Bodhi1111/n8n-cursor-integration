@@ -1,0 +1,71 @@
+{
+  "templates": [
+    {
+      "name": "POST JSON Data",
+      "method": "POST",
+      "url": "https://api.example.com/webhook",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {{$node[\"Set\"].json[\"api_key\"]}}",
+        "User-Agent": "n8n-workflow/1.0"
+      },
+      "body": {
+        "timestamp": "{{$now}}",
+        "source": "n8n",
+        "data": "{{$json}}"
+      },
+      "description": "Template for sending JSON data via POST request"
+    },
+    {
+      "name": "GET with Query Parameters",
+      "method": "GET",
+      "url": "https://api.example.com/search",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "query_parameters": {
+        "q": "{{$node[\"Function\"].json[\"search_term\"]}}",
+        "limit": "{{$node[\"Function\"].json[\"limit\"] || 10}}",
+        "page": "{{$node[\"Function\"].json[\"page\"] || 1}}"
+      },
+      "description": "Template for GET requests with dynamic query parameters"
+    },
+    {
+      "name": "Webhook Receiver",
+      "method": "POST",
+      "url": "{{$node[\"Webhook\"].json[\"webhook_url\"]}}",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Webhook-Source": "n8n",
+        "X-Webhook-Event": "{{$node[\"Function\"].json[\"event_type\"]}}"
+      },
+      "body": {
+        "event": "{{$node[\"Function\"].json[\"event_type\"]}}",
+        "timestamp": "{{$now}}",
+        "data": "{{$json}}",
+        "metadata": {
+          "workflow_id": "{{$workflow.id}}",
+          "execution_id": "{{$execution.id}}"
+        }
+      },
+      "description": "Template for sending data to external webhooks"
+    },
+    {
+      "name": "File Upload",
+      "method": "POST",
+      "url": "https://api.example.com/upload",
+      "headers": {
+        "Authorization": "Bearer {{$node[\"Set\"].json[\"api_key\"]}}"
+      },
+      "body": {
+        "file": "{{$binary.data}}",
+        "filename": "{{$json.filename}}",
+        "metadata": {
+          "description": "{{$json.description}}",
+          "tags": "{{$json.tags}}"
+        }
+      },
+      "description": "Template for file uploads with metadata"
+    }
+  ]
+}

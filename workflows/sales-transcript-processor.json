@@ -1,0 +1,139 @@
+{
+  "name": "Sales Transcript Processor",
+  "description": "Automated workflow to process sales meeting transcripts and extract insights",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "File Watcher Trigger",
+      "type": "n8n-nodes-base.filesystemTrigger",
+      "position": [100, 200],
+      "parameters": {
+        "path": "/files/transcripts/incoming",
+        "watch": "file",
+        "event": "add",
+        "recursive": true,
+        "ignorePattern": "(?i)\\.(tmp|log|bak)$"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Validate File Type",
+      "type": "n8n-nodes-base.if",
+      "position": [300, 200],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node['File Watcher Trigger'].json.name}}",
+              "operation": "regex",
+              "value2": "\\.(txt|md|docx|pdf)$"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Read Transcript File",
+      "type": "n8n-nodes-base.readFile",
+      "position": [500, 150],
+      "parameters": {
+        "filePath": "={{$node['File Watcher Trigger'].json.path}}",
+        "dataPropertyName": "transcriptContent"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Extract Meeting Metadata",
+      "type": "n8n-nodes-base.function",
+      "position": [700, 150],
+      "parameters": {
+        "functionCode": "// Extract basic metadata from transcript\nconst content = items[0].json.transcriptContent;\nconst filePath = items[0].json.path;\nconst fileName = filePath.split('/').pop();\n\n// Parse filename for metadata (assuming format: YYYY-MM-DD_CompanyName_MeetingType.txt)\nconst fileNameParts = fileName.split('_');\nconst dateMatch = fileName.match(/\\d{4}-\\d{2}-\\d{2}/);\n\n// Extract basic info from content\nconst lines = content.split('\\n');\nconst wordCount = content.split(/\\s+/).length;\nconst duration = content.match(/Duration.*?(\\d+)\\s*min/i)?.[1] || 'Unknown';\n\nreturn [{\n  json: {\n    fileName,\n    filePath,\n    transcriptContent: content,\n    meetingDate: dateMatch ? dateMatch[0] : new Date().toISOString().split('T')[0],\n    companyName: fileNameParts[1] || 'Unknown',\n    meetingType: fileNameParts[2]?.replace('.txt', '') || 'Unknown',\n    wordCount,\n    estimatedDuration: duration,\n    processedAt: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "5",
+      "name": "BMad Analyst Agent",
+      "type": "n8n-nodes-base.function",
+      "position": [900, 150],
+      "parameters": {
+        "functionCode": "// Initialize BMad Method Analyst Agent for sales data extraction\nconst { execSync } = require('child_process');\nconst fs = require('fs');\nconst path = require('path');\n\n// Create a prompt for the analyst agent\nconst transcriptData = items[0].json;\nconst analysisPrompt = `\nI am the BMad Method Analyst Agent. Please analyze this sales meeting transcript and extract key sales data:\n\nMeeting Details:\n- Company: ${transcriptData.companyName}\n- Date: ${transcriptData.meetingDate}\n- Type: ${transcriptData.meetingType}\n\nTranscript Content:\n${transcriptData.transcriptContent}\n\nPlease extract the following information in JSON format:\n1. Contact Information (names, titles, emails, phone numbers)\n2. Company Details (size, industry, pain points, budget indicators)\n3. Sales Stage (lead qualification, needs assessment, proposal, negotiation, closing)\n4. Next Steps (follow-up actions, timeline, decision makers)\n5. Pain Points (specific problems mentioned)\n6. Budget Indicators (budget ranges, timing, approval process)\n7. Competition (competitors mentioned, comparisons made)\n8. Decision Criteria (what matters most to the prospect)\n9. Urgency Level (timeline pressure, immediate needs)\n10. Key Quotes (impactful statements for marketing)\n`;\n\nreturn [{\n  json: {\n    ...transcriptData,\n    analysisPrompt,\n    status: 'ready_for_analysis'\n  }\n}];"
+      }
+    },
+    {
+      "id": "6",
+      "name": "LLM Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1100, 150],
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a sales analyst AI specializing in extracting structured data from sales meeting transcripts. Always respond with valid JSON containing the requested fields."
+          },
+          {
+            "role": "user",
+            "content": "={{$node['BMad Analyst Agent'].json.analysisPrompt}}"
+          }
+        ],
+        "temperature": 0.3,
+        "maxTokens": 2000
+      }
+    },
+    {
+      "id": "7",
+      "name": "Parse Sales Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1300, 150],
+      "parameters": {
+        "functionCode": "// Parse the LLM response and structure the sales data\nconst originalData = items[0].json;\nconst llmResponse = originalData.message?.content || originalData.text;\n\ntry {\n  // Extract JSON from LLM response\n  const jsonMatch = llmResponse.match(/\\{[\\s\\S]*\\}/);\n  const salesData = jsonMatch ? JSON.parse(jsonMatch[0]) : {};\n  \n  return [{\n    json: {\n      // Original metadata\n      fileName: originalData.fileName,\n      filePath: originalData.filePath,\n      meetingDate: originalData.meetingDate,\n      companyName: originalData.companyName,\n      meetingType: originalData.meetingType,\n      processedAt: originalData.processedAt,\n      \n      // Extracted sales data\n      contactInfo: salesData.contactInfo || [],\n      companyDetails: salesData.companyDetails || {},\n      salesStage: salesData.salesStage || 'Unknown',\n      nextSteps: salesData.nextSteps || [],\n      painPoints: salesData.painPoints || [],\n      budgetIndicators: salesData.budgetIndicators || {},\n      competition: salesData.competition || [],\n      decisionCriteria: salesData.decisionCriteria || [],\n      urgencyLevel: salesData.urgencyLevel || 'Unknown',\n      keyQuotes: salesData.keyQuotes || [],\n      \n      // Analysis metadata\n      extractionStatus: 'completed',\n      rawLLMResponse: llmResponse\n    }\n  }];\n} catch (error) {\n  return [{\n    json: {\n      ...originalData,\n      extractionStatus: 'failed',\n      error: error.message,\n      rawLLMResponse: llmResponse\n    }\n  }];\n}"
+      }
+    },
+    {
+      "id": "8",
+      "name": "Route to Outputs",
+      "type": "n8n-nodes-base.switch",
+      "position": [1500, 150],
+      "parameters": {
+        "mode": "expression",
+        "output": "multiple",
+        "rules": [
+          {
+            "operation": "equal",
+            "value1": "={{$json.extractionStatus}}",
+            "value2": "completed"
+          }
+        ]
+      }
+    },
+    {
+      "id": "9",
+      "name": "Generate Email Recap",
+      "type": "n8n-nodes-base.function",
+      "position": [1700, 50],
+      "parameters": {
+        "functionCode": "// Generate professional email recap for follow-up\nconst data = items[0].json;\n\nconst emailRecap = `\nSubject: Follow-up from our ${data.meetingType} meeting - ${data.companyName}\n\nHi ${data.contactInfo[0]?.name || 'there'},\n\nThank you for taking the time to speak with us ${data.meetingDate}. I wanted to recap our conversation and outline the next steps.\n\n## Key Discussion Points:\n${data.painPoints.map(point => `• ${point}`).join('\\n')}\n\n## Your Requirements:\n${data.decisionCriteria.map(criteria => `• ${criteria}`).join('\\n')}\n\n## Next Steps:\n${data.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\\n')}\n\n## Timeline:\nBased on our discussion, you mentioned ${data.urgencyLevel} priority for this initiative.\n\n${data.budgetIndicators.range ? `Budget Range Discussed: ${data.budgetIndicators.range}` : ''}\n\nI'll be in touch ${data.nextSteps[0]?.includes('week') ? 'next week' : 'soon'} with the information we discussed.\n\nBest regards,\n[Your Name]\n`;\n\nreturn [{\n  json: {\n    ...data,\n    emailRecap,\n    emailSubject: `Follow-up from our ${data.meetingType} meeting - ${data.companyName}`,\n    emailType: 'follow_up_recap'\n  }\n}];"
+      }
+    },
+    {
+      "id": "10",
+      "name": "Generate Social Content",
+      "type": "n8n-nodes-base.function",
+      "position": [1700, 150],
+      "parameters": {
+        "functionCode": "// Generate viral social media content from key quotes\nconst data = items[0].json;\n\nconst socialContent = {\n  linkedin: {\n    post: `🎯 Just had an incredible conversation with ${data.companyName}!\\n\\n\"${data.keyQuotes[0] || 'Great insights were shared about industry challenges'}\"`\n    + `\\n\\nLove connecting with forward-thinking leaders who are tackling ${data.painPoints[0] || 'real business challenges'}.\\n\\n`\n    + `#Sales #${data.companyDetails.industry || 'Business'} #Innovation`,\n    type: 'professional_insight'\n  },\n  twitter: {\n    post: `🔥 Quote from today's meeting: \"${data.keyQuotes[0] || 'Innovation starts with understanding real problems'}\"\\n\\n`\n    + `#SalesLife #${data.companyDetails.industry || 'Business'}`,\n    type: 'quote_tweet'\n  },\n  instagram: {\n    caption: `Behind the scenes: Just wrapped up an amazing meeting with ${data.companyName} 📈\\n\\n`\n    + `Always inspired by leaders who are solving real problems in ${data.companyDetails.industry || 'their industry'}.\\n\\n`\n    + `#entrepreneurlife #sales #meetingday`,\n    type: 'story_content'\n  },\n  facebook: {\n    post: `Had a fantastic meeting today with the team at ${data.companyName}! 🚀\\n\\n`\n    + `It's always energizing to meet with companies that are serious about ${data.painPoints[0] || 'solving real challenges'}. `\n    + `Looking forward to helping them achieve their goals!`,\n    type: 'business_update'\n  }\n};\n\nreturn [{\n  json: {\n    ...data,\n    socialContent,\n    contentGenerated: true,\n    contentType: 'viral_social_media'\n  }\n}];"
+      }
+    },
+    {
+      "id": "11",
+      "name": "Save to Notion CRM",
+      "type": "n8n-nodes-base.notion",
+      "position": [1700, 250],
+      "parameters": {
+        "resource": "page",
+        "operation": "create",
+        "databaseId": "{{$env.NOTION_CRM_DATABASE_ID}}",
+        "properties": {\n          \"Company\": {\n            \"title\": [\n              {\n                \"text\": {\n                  \"content\": \"={{$json.companyName}}\"\n                }\n              }\n            ]\n          },\n          \"Meeting Date\": {\n            \"date\": {\n              \"start\": \"={{$json.meetingDate}}\"\n            }\n          },\n          \"Sales Stage\": {\n            \"select\": {\n              \"name\": \"={{$json.salesStage}}\"\n            }\n          },\n          \"Contact Name\": {\n            \"rich_text\": [\n              {\n                \"text\": {\n                  \"content\": \"={{$json.contactInfo[0]?.name || 'Unknown'}}\"\n                }\n              }\n            ]\n          },\n          \"Industry\": {\n            \"select\": {\n              \"name\": \"={{$json.companyDetails.industry || 'Unknown'}}\"\n            }\n          },\n          \"Urgency\": {\n            \"select\": {\n              \"name\": \"={{$json.urgencyLevel}}\"\n            }\n          },\n          \"Budget Range\": {\n            \"rich_text\": [\n              {\n                \"text\": {\n                  \"content\": \"={{$json.budgetIndicators.range || 'TBD'}}\"\n                }\n              }\n            ]\n          },\n          \"Next Steps\": {\n            \"rich_text\": [\n              {\n                \"text\": {\n                  \"content\": \"={{$json.nextSteps.join('; ')}}\"\n                }\n              }\n            ]\n          },\n          \"Pain Points\": {\n            \"rich_text\": [\n              {\n                \"text\": {\n                  \"content\": \"={{$json.painPoints.join('; ')}}\"\n                }\n              }\n            ]\n          },\n          \"Transcript File\": {\n            \"files\": [\n              {\n                \"name\": \"={{$json.fileName}}\",\n                \"file\": {\n                  \"url\": \"file://={{$json.filePath}}\"\n                }\n              }\n            ]\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"12\",\n      \"name\": \"Email Notification\",\n      \"type\": \"n8n-nodes-base.emailSend\",\n      \"position\": [1900, 50],\n      \"parameters\": {\n        \"fromEmail\": \"{{$env.SENDER_EMAIL}}\",\n        \"toEmail\": \"{{$env.SALES_TEAM_EMAIL}}\",\n        \"subject\": \"={{$node['Generate Email Recap'].json.emailSubject}}\",\n        \"text\": \"={{$node['Generate Email Recap'].json.emailRecap}}\",\n        \"html\": \"<pre>={{$node['Generate Email Recap'].json.emailRecap}}</pre>\"\n      }\n    },\n    {\n      \"id\": \"13\",\n      \"name\": \"Archive Processed File\",\n      \"type\": \"n8n-nodes-base.moveFile\",\n      \"position\": [1900, 250],\n      \"parameters\": {\n        \"sourcePath\": \"={{$node['Parse Sales Data'].json.filePath}}\",\n        \"destinationPath\": \"=/files/transcripts/processed/={{$node['Parse Sales Data'].json.fileName}}\"\n      }\n    },\n    {\n      \"id\": \"14\",\n      \"name\": \"Error Handler\",\n      \"type\": \"n8n-nodes-base.function\",\n      \"position\": [1500, 350],\n      \"parameters\": {\n        \"functionCode\": \"// Handle errors and log them\\nconst errorData = items[0].json;\\n\\nconsole.error('Sales transcript processing failed:', {\\n  fileName: errorData.fileName,\\n  error: errorData.error,\\n  timestamp: new Date().toISOString()\\n});\\n\\nreturn [{\\n  json: {\\n    ...errorData,\\n    notificationSent: true,\\n    errorHandled: true\\n  }\\n}];\"\n      }\n    }\n  ],\n  \"connections\": {\n    \"1\": {\n      \"main\": [[{\"node\": \"2\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"2\": {\n      \"main\": [\n        [{\"node\": \"3\", \"type\": \"main\", \"index\": 0}],\n        []\n      ]\n    },\n    \"3\": {\n      \"main\": [[{\"node\": \"4\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"4\": {\n      \"main\": [[{\"node\": \"5\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"5\": {\n      \"main\": [[{\"node\": \"6\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"6\": {\n      \"main\": [[{\"node\": \"7\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"7\": {\n      \"main\": [[{\"node\": \"8\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"8\": {\n      \"main\": [\n        [\n          {\"node\": \"9\", \"type\": \"main\", \"index\": 0},\n          {\"node\": \"10\", \"type\": \"main\", \"index\": 0},\n          {\"node\": \"11\", \"type\": \"main\", \"index\": 0}\n        ],\n        [{\"node\": \"14\", \"type\": \"main\", \"index\": 0}]\n      ]\n    },\n    \"9\": {\n      \"main\": [[{\"node\": \"12\", \"type\": \"main\", \"index\": 0}]]\n    },\n    \"11\": {\n      \"main\": [[{\"node\": \"13\", \"type\": \"main\", \"index\": 0}]]\n    }\n  },\n  \"settings\": {\n    \"timezone\": \"America/New_York\",\n    \"saveExecutionProgress\": true,\n    \"saveManualExecutions\": true\n  }\n}

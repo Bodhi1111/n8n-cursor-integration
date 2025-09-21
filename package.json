@@ -1,0 +1,49 @@
+{
+  "name": "n8n-cursor-integration",
+  "version": "1.0.0",
+  "description": "Local n8n workflows with Cursor IDE integration for rapid development",
+  "main": "index.js",
+  "scripts": {
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down",
+    "restart": "docker-compose restart",
+    "logs": "docker-compose logs -f n8n",
+    "dev": "nodemon --watch scripts --exec 'node scripts/test-runner.js'",
+    "test": "node scripts/test-runner.js",
+    "test:sales": "node scripts/test-sales-workflow.js",
+    "test:sales:file": "node scripts/test-sales-workflow.js --generate-test-file",
+    "lint": "eslint scripts/*.js",
+    "lint:fix": "eslint scripts/*.js --fix",
+    "format": "prettier --write .",
+    "markdownlint": "markdownlint '**/*.md' --ignore node_modules",
+    "sales:setup": "echo 'Follow the setup guide in docs/sales-transcript-processor-setup.md'",
+    "sales:test": "npm run test:sales",
+    "batch:scan": "node scripts/batch-processor-helper.js scan",
+    "batch:analyze": "node scripts/batch-processor-helper.js analyze",
+    "batch:prepare": "node scripts/batch-processor-helper.js prepare",
+    "batch:report": "node scripts/batch-processor-helper.js report",
+    "batch:validate": "node scripts/batch-processor-helper.js validate"
+  },
+  "keywords": [
+    "n8n",
+    "workflows",
+    "automation",
+    "docker",
+    "cursor-ide"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^8.0.0",
+    "markdownlint-cli": "^0.37.0",
+    "nodemon": "^3.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "bmad-method": "^4.43.1",
+    "lodash": "^4.17.21"
+  }
+}

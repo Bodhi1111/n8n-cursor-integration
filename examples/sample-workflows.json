@@ -1,0 +1,119 @@
+{
+  "workflows": [
+    {
+      "name": "Data Processing Pipeline",
+      "description": "Processes incoming data, validates it, and routes to different outputs",
+      "nodes": [
+        {
+          "name": "Webhook Trigger",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "data-processor",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "name": "Data Validator",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "// Copy content from scripts/data-processor.js"
+          }
+        },
+        {
+          "name": "Route by Status",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "// Copy content from scripts/conditional-router.js"
+          }
+        }
+      ],
+      "connections": {
+        "Webhook Trigger": ["Data Validator"],
+        "Data Validator": ["Route by Status"]
+      }
+    },
+    {
+      "name": "File Processing Workflow",
+      "description": "Handles file uploads, processes metadata, and stores results",
+      "nodes": [
+        {
+          "name": "File Upload Trigger",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "file-upload",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "name": "File Processor",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "// Copy content from scripts/file-processor.js"
+          }
+        },
+        {
+          "name": "Store File Info",
+          "type": "n8n-nodes-base.writeBinaryFile",
+          "parameters": {
+            "fileName": "{{$json.name}}_metadata.json",
+            "data": "={{JSON.stringify($json)}}"
+          }
+        }
+      ],
+      "connections": {
+        "File Upload Trigger": ["File Processor"],
+        "File Processor": ["Store File Info"]
+      }
+    },
+    {
+      "name": "API Integration Workflow",
+      "description": "Fetches data from external API, processes it, and sends to webhook",
+      "nodes": [
+        {
+          "name": "Schedule Trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "parameters": {
+            "rule": {
+              "interval": [{"field": "hours", "hoursInterval": 1}]
+            }
+          }
+        },
+        {
+          "name": "Fetch API Data",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "method": "GET",
+            "url": "https://api.example.com/data",
+            "headers": {
+              "Authorization": "Bearer {{$node['Set'].json['api_key']}}"
+            }
+          }
+        },
+        {
+          "name": "Process API Response",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "// Copy content from scripts/api-payload-builder.js"
+          }
+        },
+        {
+          "name": "Send to Webhook",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "{{$node['Set'].json['webhook_url']}}",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "={{JSON.stringify($json)}}"
+          }
+        }
+      ],
+      "connections": {
+        "Schedule Trigger": ["Fetch API Data"],
+        "Fetch API Data": ["Process API Response"],
+        "Process API Response": ["Send to Webhook"]
+      }
+    }
+  ]
+}

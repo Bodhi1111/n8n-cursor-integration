@@ -1,0 +1,155 @@
+{
+  "name": "Baserow Integration Example",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal/api/database/rows/table/YOUR_TABLE_ID/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token YOUR_BASEROW_API_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-baserow-data",
+      "name": "Get Baserow Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal/api/database/rows/table/YOUR_TABLE_ID/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token YOUR_BASEROW_API_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "field_123",
+              "value": "Sample Value"
+            },
+            {
+              "name": "field_456",
+              "value": "Another Value"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-baserow-row",
+      "name": "Create Baserow Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "http://host.docker.internal/api/database/rows/table/YOUR_TABLE_ID/ROW_ID/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token YOUR_BASEROW_API_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "field_123",
+              "value": "Updated Value"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-baserow-row",
+      "name": "Update Baserow Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Baserow Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Baserow Data": {
+      "main": [
+        [
+          {
+            "node": "Create Baserow Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Baserow Row": {
+      "main": [
+        [
+          {
+            "node": "Update Baserow Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1",
+  "id": "baserow-integration-example",
+  "meta": {
+    "instanceId": "n8n-cursor-integration"
+  },
+  "tags": []
+}

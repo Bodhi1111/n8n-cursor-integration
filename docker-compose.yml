@@ -1,0 +1,64 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n-cursor-integration
+    ports:
+      - "5679:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5679/
+      - GENERIC_TIMEZONE=UTC
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+      - N8N_ENCRYPTION_KEY=your-encryption-key-here-change-this
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/home/node/.n8n/workflows
+      - ./credentials:/home/node/.n8n/credentials
+      - ./scripts:/home/node/scripts
+      - ./data:/home/node/data
+      # Sales Transcript Processing Folders (Local Documents)
+      - "/Users/joshuavaughan/Documents/McAdams Transcripts:/files/transcripts/incoming:rw"
+      - "/Users/joshuavaughan/Documents/McAdams Transcripts/Processed:/files/transcripts/processed:rw"
+      - "/Users/joshuavaughan/Documents/McAdams Transcripts/Archive:/files/transcripts/archive:rw"
+    restart: unless-stopped
+    networks:
+      - n8n-network
+
+  baserow:
+    image: baserow/baserow:latest
+    container_name: baserow
+    environment:
+      - BASEROW_PUBLIC_URL=http://localhost:8080
+      - BASEROW_ALLOWED_HOSTS=localhost,baserow,host.docker.internal
+      - BASEROW_ENABLE_SECURE_PROXY_SSL_HEADER=False
+      - BASEROW_JWT_SIGNING_KEY=your-secret-jwt-key-change-this
+      - BASEROW_DATABASE_PASSWORD=baserow
+      - BASEROW_DATABASE_USER=baserow
+      - BASEROW_DATABASE_NAME=baserow
+    volumes:
+      - baserow_data:/baserow/data
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/signup"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  n8n_data:
+  baserow_data:
+    name: baserow_data
+
+networks:
+  n8n-network:
+    driver: bridge

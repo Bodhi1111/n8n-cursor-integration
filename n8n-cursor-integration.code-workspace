@@ -1,0 +1,42 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "markdownlint.config": {
+      "MD022": false,
+      "MD031": false,
+      "MD032": false,
+      "MD034": false,
+      "MD040": false,
+      "MD012": false,
+      "MD029": false,
+      "MD013": false
+    },
+    "markdownlint.ignore": [
+      "README.md",
+      "scripts/README.md"
+    ],
+    "files.associations": {
+      "*.md": "markdown"
+    },
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit"
+    },
+    "typescript.preferences.includePackageJsonAutoImports": "auto",
+    "javascript.preferences.includePackageJsonAutoImports": "auto",
+    "eslint.workingDirectories": ["."],
+    "prettier.requireConfig": true
+  },
+  "extensions": {
+    "recommendations": [
+      "davidanson.vscode-markdownlint",
+      "ms-vscode.vscode-typescript-next",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint"
+    ]
+  }
+}

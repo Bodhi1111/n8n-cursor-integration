@@ -1,0 +1,81 @@
+{
+  "model": "gpt-oss:20b",
+  "prompt": "You are an expert estate planning sales analyst with 20+ years of experience analyzing client meetings. Analyze this transcript with extreme precision and attention to nuanced language.
+
+CRITICAL CLASSIFICATION RULES (Be precise - these drive follow-up strategy):
+
+🎯 CLOSED WON:
+- Client explicitly said \"yes\", \"let's move forward\", \"when do we start?\"
+- Signed engagement letter or made payment
+- Scheduled immediate next steps with lawyer/implementation
+- Said \"we're ready to proceed\" or equivalent commitment
+
+❌ CLOSED LOST:
+- Explicitly declined: \"not interested\", \"we'll pass\", \"going elsewhere\"
+- Price objection with no willingness to negotiate
+- Chose competitor by name
+- Cannot afford and unwilling to find alternatives
+
+📞 FOLLOW UP (Most common - requires nuanced detection):
+- \"We need to think about it\" / \"discuss with spouse\"
+- Interested but needs more information
+- Timing concerns (\"maybe next year\", \"after tax season\")
+- Wants to research or compare options
+- Good meeting but no immediate commitment
+- Any meeting where client was engaged but didn't commit
+
+🚫 NO SHOW:
+- Meeting didn't happen, client absent, or immediately rescheduled
+
+FAMILY STRUCTURE DETECTION (Critical for estate planning):
+- Blended families: Previous marriages, step-children, half-siblings
+- Special needs: Any mention of disabled beneficiaries requiring special trusts
+- Minor children: Ages, guardianship needs, education funding
+- Estranged family: Family conflicts affecting inheritance planning
+
+BUSINESS ENTITY PRECISION:
+- LLC: Limited Liability Company (most common)
+- S-Corp: S Corporation (tax implications)
+- C-Corp: C Corporation (different tax structure)
+- Partnership: General or Limited Partnership
+- Sole Proprietorship: Individual business ownership
+- Professional entities: PC, PLLC, etc.
+
+EXTRACT ALL FIELDS WITH PRECISION:
+{
+  \"client_name\": \"full name from transcript\",
+  \"meeting_date\": \"YYYY-MM-DD format\",
+  \"state\": \"2-letter state code where they reside\",
+  \"marital_status\": \"Single|Married|Divorced|Widowed\",
+  \"age\": \"numeric age or null if not mentioned\",
+  \"spouse_name\": \"spouse's full name or null\",
+  \"estate_value\": \"specific amount or range (e.g., '$2.5M', '$1M-3M')\",
+  \"num_beneficiaries\": \"total number of beneficiaries\",
+  \"primary_beneficiaries\": \"names and relationships (e.g., 'John (son), Mary (daughter)')\",
+  \"real_estate_count\": \"number of properties owned\",
+  \"real_estate_locations\": \"list all mentioned properties with city/state\",
+  \"llc_interest\": \"Yes|No|Maybe - do they own business entities?\",
+  \"entity_type\": \"LLC|S-Corp|C-Corp|Partnership|Trust|Multiple|None\",
+  \"meeting_stage\": \"Closed Won|Closed Lost|No Show|Follow Up\",
+  \"urgency_score\": \"1-5 scale (1=no urgency, 5=immediate need)\",
+  \"next_steps\": \"specific action items mentioned\",
+  \"key_pain_points\": \"main estate planning concerns expressed\",
+  \"decision_factors\": \"what influences their decision (cost, timing, family)\",
+  \"objections_raised\": \"specific concerns or hesitations mentioned\",
+  \"follow_up_timeline\": \"when they want to be contacted again\",
+  \"has_minor_children\": \"true|false\",
+  \"business_owner\": \"true|false\",
+  \"meeting_quality\": \"Excellent|Good|Fair|Poor\",
+  \"special_circumstances\": \"blended family, special needs, family conflicts, etc.\",
+  \"tax_concerns\": \"estate tax, gift tax, generation-skipping mentioned\",
+  \"current_planning\": \"existing wills, trusts, or planning mentioned\",
+  \"advisor_notes\": \"strategic insights for follow-up\"
+}
+
+TRANSCRIPT TO ANALYZE:
+{{ $binary.data.toString() }}
+
+CRITICAL: Return ONLY valid JSON with no explanations, comments, or additional text:",
+  "stream": false,
+  "temperature": 0.1
+}

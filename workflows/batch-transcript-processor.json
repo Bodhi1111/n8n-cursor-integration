@@ -1,0 +1,323 @@
+{
+  "name": "Batch Transcript Processor",
+  "description": "Process all existing transcripts in bulk to populate sales dashboard",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Manual Batch Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [100, 200],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Get All Transcript Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [300, 200],
+      "parameters": {
+        "command": "find",
+        "arguments": "/files/transcripts/incoming -name '*.txt' -o -name '*.md' -o -name '*.docx' -type f"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Split File List",
+      "type": "n8n-nodes-base.function",
+      "position": [500, 200],
+      "parameters": {
+        "functionCode": "// Split the file list into individual items\nconst fileList = items[0].json.stdout;\nconst files = fileList.split('\\n').filter(f => f.trim().length > 0);\n\nconst results = files.map((filePath, index) => ({\n  json: {\n    filePath: filePath.trim(),\n    fileName: filePath.split('/').pop(),\n    batchIndex: index + 1,\n    totalFiles: files.length,\n    processedAt: new Date().toISOString()\n  }\n}));\n\nreturn results;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Process Each File",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [700, 200],
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "continueOnFail": true
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Read Transcript Content",
+      "type": "n8n-nodes-base.readFile",
+      "position": [900, 200],
+      "parameters": {
+        "filePath": "={{$json.filePath}}",
+        "dataPropertyName": "transcriptContent"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Extract File Metadata",
+      "type": "n8n-nodes-base.function",
+      "position": [1100, 200],
+      "parameters": {
+        "functionCode": "// Enhanced metadata extraction for batch processing\nconst content = items[0].json.transcriptContent;\nconst filePath = items[0].json.filePath;\nconst fileName = items[0].json.fileName;\nconst batchIndex = items[0].json.batchIndex;\nconst totalFiles = items[0].json.totalFiles;\n\n// Parse filename for metadata (YYYY-MM-DD_CompanyName_MeetingType.txt)\nconst fileNameParts = fileName.split('_');\nconst dateMatch = fileName.match(/\\d{4}-\\d{2}-\\d{2}/);\n\n// Extract basic info from content\nconst lines = content.split('\\n');\nconst wordCount = content.split(/\\s+/).length;\nconst duration = content.match(/Duration.*?(\\d+)\\s*min/i)?.[1] || 'Unknown';\n\n// Enhanced company name extraction\nlet companyName = 'Unknown';\nif (fileNameParts.length > 1) {\n  companyName = fileNameParts[1];\n} else {\n  // Try to extract from content\n  const companyMatch = content.match(/(?:Company|Client|Organization):\\s*([^\\n]+)/i);\n  if (companyMatch) companyName = companyMatch[1].trim();\n}\n\nreturn [{\n  json: {\n    fileName,\n    filePath,\n    transcriptContent: content,\n    meetingDate: dateMatch ? dateMatch[0] : new Date().toISOString().split('T')[0],\n    companyName: companyName.replace(/[^a-zA-Z0-9\\s]/g, ''),\n    meetingType: fileNameParts[2]?.replace('.txt', '').replace('.md', '') || 'Meeting',\n    wordCount,\n    estimatedDuration: duration,\n    batchInfo: {\n      currentFile: batchIndex,\n      totalFiles: totalFiles,\n      progress: Math.round((batchIndex / totalFiles) * 100)\n    },\n    processedAt: new Date().toISOString(),\n    source: 'batch_processing'\n  }\n}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "BMad Analyst - Batch Mode",
+      "type": "n8n-nodes-base.function",
+      "position": [1300, 200],
+      "parameters": {
+        "functionCode": "// BMad Method Analyst Agent for batch processing\nconst transcriptData = items[0].json;\n\n// Enhanced prompt for batch processing with progress tracking\nconst analysisPrompt = `\nI am Mary, the BMad Method Business Analyst, processing transcript ${transcriptData.batchInfo.currentFile} of ${transcriptData.batchInfo.totalFiles} (${transcriptData.batchInfo.progress}% complete).\n\nAnalyzing sales meeting transcript for comprehensive CRM data extraction:\n\nMeeting Details:\n- Company: ${transcriptData.companyName}\n- Date: ${transcriptData.meetingDate}\n- Type: ${transcriptData.meetingType}\n- File: ${transcriptData.fileName}\n\nTranscript Content:\n${transcriptData.transcriptContent}\n\nPlease extract comprehensive sales intelligence in JSON format:\n\n{\n  \"contactInfo\": [\n    {\n      \"name\": \"Contact name\",\n      \"title\": \"Job title\",\n      \"email\": \"email if mentioned\",\n      \"phone\": \"phone if mentioned\",\n      \"role\": \"decision_maker|influencer|user|gatekeeper\"\n    }\n  ],\n  \"companyDetails\": {\n    \"size\": \"startup|small|medium|large|enterprise\",\n    \"industry\": \"Industry category\",\n    \"revenue\": \"Revenue range if mentioned\",\n    \"employees\": \"Employee count if mentioned\",\n    \"headquarters\": \"Location if mentioned\"\n  },\n  \"salesStage\": \"lead_qualification|needs_assessment|solution_presentation|proposal|negotiation|closing|won|lost\",\n  \"salesMetrics\": {\n    \"dealSize\": \"Potential deal value\",\n    \"probability\": \"Win probability percentage\",\n    \"timeline\": \"Expected close timeline\",\n    \"competitors\": [\"List of competitors mentioned\"]\n  },\n  \"painPoints\": [\n    {\n      \"description\": \"Specific pain point\",\n      \"impact\": \"Business impact described\",\n      \"urgency\": \"high|medium|low\"\n    }\n  ],\n  \"requirements\": [\n    {\n      \"requirement\": \"Specific requirement\",\n      \"priority\": \"must_have|nice_to_have|future\"\n    }\n  ],\n  \"budgetIndicators\": {\n    \"range\": \"Budget range if mentioned\",\n    \"timeframe\": \"Budget availability timeline\",\n    \"approvalProcess\": \"Who needs to approve\"\n  },\n  \"decisionCriteria\": [\n    {\n      \"criteria\": \"Decision factor\",\n      \"weight\": \"high|medium|low\"\n    }\n  ],\n  \"nextSteps\": [\n    {\n      \"action\": \"Specific next step\",\n      \"owner\": \"Who is responsible\",\n      \"timeline\": \"When it should happen\"\n    }\n  ],\n  \"keyQuotes\": [\n    {\n      \"quote\": \"Exact quote from transcript\",\n      \"speaker\": \"Who said it\",\n      \"context\": \"Why this quote is significant\"\n    }\n  ],\n  \"sentiment\": {\n    \"overall\": \"positive|neutral|negative\",\n    \"engagement\": \"high|medium|low\",\n    \"buyingSignals\": [\"Positive buying signals detected\"]\n  }\n}\n\nFocus on extracting actionable sales intelligence for CRM population and dashboard insights.\n`;\n\nreturn [{\n  json: {\n    ...transcriptData,\n    analysisPrompt,\n    status: 'ready_for_analysis',\n    processingMode: 'batch'\n  }\n}];"
+      }
+    },
+    {
+      "id": "8",
+      "name": "LLM Analysis - Batch",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1500, 200],
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are Mary, the BMad Method Business Analyst, specializing in extracting structured sales data from transcripts for CRM population. Always respond with valid JSON containing all requested fields. Focus on actionable sales intelligence."
+          },
+          {
+            "role": "user",
+            "content": "={{$json.analysisPrompt}}"
+          }
+        ],
+        "temperature": 0.2,
+        "maxTokens": 2500
+      }
+    },
+    {
+      "id": "9",
+      "name": "Parse & Validate Sales Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1700, 200],
+      "parameters": {
+        "functionCode": "// Parse LLM response and validate for batch processing\nconst originalData = items[0].json;\nconst llmResponse = originalData.message?.content || originalData.text;\n\ntry {\n  // Extract JSON from LLM response\n  const jsonMatch = llmResponse.match(/\\{[\\s\\S]*\\}/);\n  const salesData = jsonMatch ? JSON.parse(jsonMatch[0]) : {};\n  \n  // Validate required fields\n  const requiredFields = ['contactInfo', 'companyDetails', 'salesStage', 'painPoints', 'nextSteps'];\n  const missingFields = requiredFields.filter(field => !salesData.hasOwnProperty(field));\n  \n  if (missingFields.length > 0) {\n    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n  }\n  \n  // Enhanced data for Notion CRM\n  return [{\n    json: {\n      // Original metadata\n      fileName: originalData.fileName,\n      filePath: originalData.filePath,\n      meetingDate: originalData.meetingDate,\n      companyName: originalData.companyName,\n      meetingType: originalData.meetingType,\n      source: originalData.source,\n      batchInfo: originalData.batchInfo,\n      \n      // Extracted sales data\n      contactInfo: salesData.contactInfo || [],\n      companyDetails: salesData.companyDetails || {},\n      salesStage: salesData.salesStage || 'Unknown',\n      salesMetrics: salesData.salesMetrics || {},\n      nextSteps: salesData.nextSteps || [],\n      painPoints: salesData.painPoints || [],\n      requirements: salesData.requirements || [],\n      budgetIndicators: salesData.budgetIndicators || {},\n      decisionCriteria: salesData.decisionCriteria || [],\n      keyQuotes: salesData.keyQuotes || [],\n      sentiment: salesData.sentiment || {},\n      \n      // Processing metadata\n      extractionStatus: 'completed',\n      extractedAt: new Date().toISOString(),\n      rawLLMResponse: llmResponse,\n      \n      // CRM ready fields\n      primaryContact: salesData.contactInfo?.[0]?.name || 'Unknown',\n      primaryEmail: salesData.contactInfo?.find(c => c.email)?.email || '',\n      dealValue: salesData.salesMetrics?.dealSize || 'TBD',\n      closeTimeline: salesData.salesMetrics?.timeline || 'Unknown',\n      urgencyLevel: salesData.painPoints?.find(p => p.urgency === 'high') ? 'High' : \n                   salesData.painPoints?.find(p => p.urgency === 'medium') ? 'Medium' : 'Low'\n    }\n  }];\n} catch (error) {\n  console.error('Batch processing error for', originalData.fileName, ':', error.message);\n  return [{\n    json: {\n      ...originalData,\n      extractionStatus: 'failed',\n      error: error.message,\n      rawLLMResponse: llmResponse,\n      retryNeeded: true\n    }\n  }];\n}"
+      }
+    },
+    {
+      "id": "10",
+      "name": "Route Success/Failure",
+      "type": "n8n-nodes-base.switch",
+      "position": [1900, 200],
+      "parameters": {
+        "mode": "expression",
+        "output": "multiple",
+        "rules": [
+          {
+            "operation": "equal",
+            "value1": "={{$json.extractionStatus}}",
+            "value2": "completed"
+          },
+          {
+            "operation": "equal",
+            "value1": "={{$json.extractionStatus}}",
+            "value2": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "id": "11",
+      "name": "Update Notion CRM",
+      "type": "n8n-nodes-base.notion",
+      "position": [2100, 100],
+      "parameters": {
+        "resource": "page",
+        "operation": "create",
+        "databaseId": "{{$env.NOTION_CRM_DATABASE_ID}}",
+        "properties": {
+          "Company": {
+            "title": [
+              {
+                "text": {
+                  "content": "={{$json.companyName}}"
+                }
+              }
+            ]
+          },
+          "Meeting Date": {
+            "date": {
+              "start": "={{$json.meetingDate}}"
+            }
+          },
+          "Sales Stage": {
+            "select": {
+              "name": "={{$json.salesStage}}"
+            }
+          },
+          "Primary Contact": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.primaryContact}}"
+                }
+              }
+            ]
+          },
+          "Email": {
+            "email": "={{$json.primaryEmail}}"
+          },
+          "Industry": {
+            "select": {
+              "name": "={{$json.companyDetails.industry || 'Unknown'}}"
+            }
+          },
+          "Company Size": {
+            "select": {
+              "name": "={{$json.companyDetails.size || 'Unknown'}}"
+            }
+          },
+          "Urgency": {
+            "select": {
+              "name": "={{$json.urgencyLevel}}"
+            }
+          },
+          "Deal Value": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.dealValue}}"
+                }
+              }
+            ]
+          },
+          "Close Timeline": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.closeTimeline}}"
+                }
+              }
+            ]
+          },
+          "Next Steps": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.nextSteps.map(step => step.action || step).join('; ')}}"
+                }
+              }
+            ]
+          },
+          "Pain Points": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.painPoints.map(p => p.description || p).join('; ')}}"
+                }
+              }
+            ]
+          },
+          "Key Quotes": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.keyQuotes.map(q => q.quote || q).slice(0, 3).join(' | ')}}"
+                }
+              }
+            ]
+          },
+          "Source File": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.fileName}}"
+                }
+              }
+            ]
+          },
+          "Processing Date": {
+            "date": {
+              "start": "={{$json.extractedAt.split('T')[0]}}"
+            }
+          },
+          "Batch Processing": {
+            "checkbox": true
+          }
+        }
+      }
+    },
+    {
+      "id": "12",
+      "name": "Log Progress",
+      "type": "n8n-nodes-base.function",
+      "position": [2300, 100],
+      "parameters": {
+        "functionCode": "// Log batch processing progress\nconst data = items[0].json;\n\nconsole.log(`✅ Processed ${data.batchInfo.currentFile}/${data.batchInfo.totalFiles}: ${data.companyName} - ${data.fileName}`);\nconsole.log(`📊 Progress: ${data.batchInfo.progress}% complete`);\n\nreturn [{\n  json: {\n    ...data,\n    progressLogged: true,\n    notionRecordCreated: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "13",
+      "name": "Log Failures",
+      "type": "n8n-nodes-base.function",
+      "position": [2100, 300],
+      "parameters": {
+        "functionCode": "// Log failed processing for review\nconst data = items[0].json;\n\nconsole.error(`❌ Failed to process ${data.batchInfo.currentFile}/${data.batchInfo.totalFiles}: ${data.fileName}`);\nconsole.error(`Error: ${data.error}`);\n\n// Could implement retry logic here or save to separate failure tracking\nreturn [{\n  json: {\n    ...data,\n    failureLogged: true,\n    requiresManualReview: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "14",
+      "name": "Batch Summary",
+      "type": "n8n-nodes-base.function",
+      "position": [2500, 200],
+      "parameters": {
+        "functionCode": "// Generate batch processing summary\nconst allItems = items;\nconst totalProcessed = allItems.length;\nconst successful = allItems.filter(item => item.json.extractionStatus === 'completed').length;\nconst failed = allItems.filter(item => item.json.extractionStatus === 'failed').length;\n\nconst summary = {\n  batchCompleted: new Date().toISOString(),\n  totalFiles: totalProcessed,\n  successful: successful,\n  failed: failed,\n  successRate: Math.round((successful / totalProcessed) * 100),\n  companiesProcessed: [...new Set(allItems.map(item => item.json.companyName))],\n  salesStages: allItems.reduce((acc, item) => {\n    const stage = item.json.salesStage;\n    acc[stage] = (acc[stage] || 0) + 1;\n    return acc;\n  }, {})\n};\n\nconsole.log('🎉 Batch Processing Complete!');\nconsole.log(`📈 Results: ${successful}/${totalProcessed} files processed successfully (${summary.successRate}%)`);\nconsole.log(`🏢 Companies: ${summary.companiesProcessed.length} unique companies`);\nconsole.log(`📊 Sales Stages:`, summary.salesStages);\n\nreturn [{\n  json: summary\n}];"
+      }
+    }
+  ],
+  "connections": {
+    "1": {
+      "main": [[{"node": "2", "type": "main", "index": 0}]]
+    },
+    "2": {
+      "main": [[{"node": "3", "type": "main", "index": 0}]]
+    },
+    "3": {
+      "main": [[{"node": "4", "type": "main", "index": 0}]]
+    },
+    "4": {
+      "main": [[{"node": "5", "type": "main", "index": 0}]]
+    },
+    "5": {
+      "main": [[{"node": "6", "type": "main", "index": 0}]]
+    },
+    "6": {
+      "main": [[{"node": "7", "type": "main", "index": 0}]]
+    },
+    "7": {
+      "main": [[{"node": "8", "type": "main", "index": 0}]]
+    },
+    "8": {
+      "main": [[{"node": "9", "type": "main", "index": 0}]]
+    },
+    "9": {
+      "main": [[{"node": "10", "type": "main", "index": 0}]]
+    },
+    "10": {
+      "main": [
+        [{"node": "11", "type": "main", "index": 0}],
+        [{"node": "13", "type": "main", "index": 0}]
+      ]
+    },
+    "11": {
+      "main": [[{"node": "12", "type": "main", "index": 0}]]
+    },
+    "12": {
+      "main": [[{"node": "14", "type": "main", "index": 0}]]
+    },
+    "13": {
+      "main": [[{"node": "14", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}

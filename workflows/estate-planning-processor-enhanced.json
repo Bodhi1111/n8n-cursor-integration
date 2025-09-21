@@ -1,0 +1,264 @@
+{
+  "name": "Estate Planning Processor - Enhanced",
+  "description": "Comprehensive estate planning transcript processor with all database fields",
+  "version": "2.0.0",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Manual Batch Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [100, 200],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Get All Transcript Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [300, 200],
+      "parameters": {
+        "command": "find",
+        "arguments": "/Users/joshuavaughan/Documents/McAdams\\ Transcripts -name '*.txt' -type f"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Split File List",
+      "type": "n8n-nodes-base.function",
+      "position": [500, 200],
+      "parameters": {
+        "functionCode": "// Split the file list into individual items\nconst fileList = items[0].json.stdout;\nconst files = fileList.split('\\n').filter(f => f.trim().length > 0);\n\nconst results = files.map((filePath, index) => {\n  const fileName = filePath.split('/').pop();\n  \n  // Extract client name from filename\n  let clientName = 'Unknown';\n  const nameMatch = fileName.match(/^([^:]+):/);  \n  if (nameMatch) {\n    clientName = nameMatch[1].trim();\n  }\n  \n  return {\n    json: {\n      filePath: filePath.trim(),\n      fileName: fileName,\n      clientName: clientName,\n      deal_id: index + 3900, // Starting from where your DB leaves off\n      batchIndex: index + 1,\n      totalFiles: files.length,\n      processedAt: new Date().toISOString()\n    }\n  };\n});\n\nreturn results;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Process Each File",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [700, 200],
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "continueOnFail": true
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Read Transcript Content",
+      "type": "n8n-nodes-base.readFile",
+      "position": [900, 200],
+      "parameters": {
+        "filePath": "={{$json.filePath}}",
+        "dataPropertyName": "transcriptContent"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Extract Estate Planning Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1100, 200],
+      "parameters": {
+        "functionCode": "// Prepare comprehensive estate planning data extraction\nconst content = items[0].json.transcriptContent;\nconst clientName = items[0].json.clientName;\nconst fileName = items[0].json.fileName;\nconst deal_id = items[0].json.deal_id;\n\n// Extract meeting date if present in filename or content\nconst dateMatch = fileName.match(/(?:May|June|July|August|September|October|November|December)\\s+\\d{1,2}/i);\nconst meetingDate = dateMatch ? `2025/${dateMatch[0]}` : '2025/09/19';\n\n// Create comprehensive extraction prompt\nconst analysisPrompt = `\nYou are an expert estate planning analyst. Extract comprehensive information from this estate planning advisor meeting transcript.\n\nClient: ${clientName}\nFile: ${fileName}\n\nTranscript Content:\n${content}\n\nExtract ALL of the following information in JSON format. If information is not explicitly stated, mark as null.\n\n{\n  \"client_info\": {\n    \"name\": \"${clientName}\",\n    \"age\": \"Extract age if mentioned\",\n    \"state_of_residence\": \"Extract state (use 2-letter code)\",\n    \"marital_status\": \"Single|Married|Divorced|Widowed\",\n    \"spouse_name\": \"Name if married\",\n    \"phone\": \"Phone number if mentioned\",\n    \"email\": \"Email if mentioned\",\n    \"occupation\": \"Their profession or retired\"\n  },\n  \"meeting_details\": {\n    \"stage\": \"Follow up|Closed Won|Closed Lost|No Show\",\n    \"objection\": \"Any concerns or objections raised\",\n    \"reason\": \"Reason for their interest or decision\",\n    \"demo_requested\": \"Yes if they want to see more, No otherwise\"\n  },\n  \"estate_details\": {\n    \"estate_value\": \"Total estate value in dollars (number only)\",\n    \"payment\": \"Amount they're paying for services (number only)\",\n    \"deposit\": \"Deposit amount if mentioned (number only)\",\n    \"estate_complexity\": \"Simple|Moderate|Complex based on assets\"\n  },\n  \"beneficiaries\": {\n    \"number_of_beneficiaries\": \"Total count\",\n    \"primary_beneficiaries\": [\"List names and relationships\"],\n    \"contingent_beneficiaries\": [\"List if mentioned\"],\n    \"charity_included\": \"Yes|No\",\n    \"charity_names\": [\"List if any\"]\n  },\n  \"assets\": {\n    \"real_estate\": {\n      \"has_real_estate\": \"Yes|No\",\n      \"number_of_properties\": \"Count\",\n      \"primary_residence_state\": \"State\",\n      \"other_properties_locations\": [\"List of states/locations\"],\n      \"total_real_estate_value\": \"Estimated value\"\n    },\n    \"financial_assets\": {\n      \"retirement_accounts\": \"Yes|No with types (401k, IRA, etc)\",\n      \"investment_accounts\": \"Yes|No with details\",\n      \"bank_accounts\": \"Mentioned or not\",\n      \"life_insurance\": \"Yes|No with amount if mentioned\",\n      \"business_ownership\": \"Yes|No with details\"\n    },\n    \"personal_property\": {\n      \"vehicles\": \"Mentioned or not\",\n      \"valuable_collections\": \"Art, jewelry, etc if mentioned\",\n      \"other_significant_assets\": \"List any\"\n    }\n  },\n  \"planning_needs\": {\n    \"needs_will\": \"Yes|No|Already Has\",\n    \"needs_trust\": \"Yes|No|Already Has with type (Living, Revocable, etc)\",\n    \"needs_power_of_attorney\": \"Yes|No|Already Has\",\n    \"needs_healthcare_directive\": \"Yes|No|Already Has\",\n    \"llc_formation_interest\": \"Yes|No\",\n    \"entity_type_needed\": \"LLC|Corporation|Partnership|None\",\n    \"tax_planning_needed\": \"Yes|No with concerns\",\n    \"special_needs_planning\": \"Yes|No with details\",\n    \"pet_trust_needed\": \"Yes|No\"\n  },\n  \"family_dynamics\": {\n    \"children_count\": \"Number of children\",\n    \"children_ages\": [\"List ages or age ranges\"],\n    \"minor_children\": \"Yes|No\",\n    \"adult_children\": \"Yes|No\",\n    \"blended_family\": \"Yes|No\",\n    \"family_conflicts\": \"Any mentioned concerns\",\n    \"special_circumstances\": \"Disabled beneficiary, addiction issues, etc\"\n  },\n  \"urgency_timeline\": {\n    \"urgency_level\": \"High|Medium|Low\",\n    \"timeline_driver\": \"Health, travel, age, tax deadline, etc\",\n    \"desired_completion\": \"Timeframe mentioned\",\n    \"follow_up_scheduled\": \"Date if mentioned\"\n  },\n  \"advisor_notes\": {\n    \"key_concerns\": [\"List main concerns discussed\"],\n    \"action_items\": [\"Next steps discussed\"],\n    \"special_instructions\": \"Any specific requests\",\n    \"referral_source\": \"How they found the service\",\n    \"additional_services_discussed\": [\"Other services mentioned\"]\n  },\n  \"extracted_quotes\": [\n    \"Important quotes that show motivation or concerns\"\n  ]\n}\n\nBe thorough and extract as much information as possible from the transcript.\n`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    analysisPrompt,\n    meetingDate,\n    status: 'ready_for_analysis'\n  }\n}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "LLM Analysis - Comprehensive",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1300, 200],
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert estate planning data analyst. Extract comprehensive structured data from transcripts. Always respond with valid JSON containing ALL requested fields. Use null for missing information rather than omitting fields."
+          },
+          {
+            "role": "user",
+            "content": "={{$json.analysisPrompt}}"
+          }
+        ],
+        "temperature": 0.1,
+        "maxTokens": 3000
+      }
+    },
+    {
+      "id": "8",
+      "name": "Parse and Structure Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1500, 200],
+      "parameters": {
+        "functionCode": "// Parse LLM response and structure for Notion\nconst originalData = items[0].json;\nconst llmResponse = originalData.message?.content || originalData.text;\n\ntry {\n  // Extract JSON from LLM response\n  const jsonMatch = llmResponse.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('No JSON found in response');\n  \n  const extractedData = JSON.parse(jsonMatch[0]);\n  \n  // Build comprehensive Notion record\n  const notionRecord = {\n    // Core identifiers\n    deal_id: originalData.deal_id,\n    date: originalData.meetingDate,\n    \n    // Client Information (matching your existing columns)\n    lead: extractedData.client_info?.name || originalData.clientName,\n    stage: extractedData.meeting_details?.stage || 'Follow up',\n    demo_requested: extractedData.meeting_details?.demo_requested || '',\n    objection: extractedData.meeting_details?.objection || '',\n    reason: extractedData.meeting_details?.reason || '',\n    \n    // Financial columns\n    payment: parseFloat(extractedData.estate_details?.payment) || 0,\n    deposit: parseFloat(extractedData.estate_details?.deposit) || 0,\n    \n    // New Estate Planning Specific Columns\n    state_of_residence: extractedData.client_info?.state_of_residence || '',\n    marital_status: extractedData.client_info?.marital_status || '',\n    age: extractedData.client_info?.age || '',\n    spouse_name: extractedData.client_info?.spouse_name || '',\n    \n    // Beneficiary Information\n    number_of_beneficiaries: extractedData.beneficiaries?.number_of_beneficiaries || 0,\n    primary_beneficiaries: (extractedData.beneficiaries?.primary_beneficiaries || []).join(', '),\n    contingent_beneficiaries: (extractedData.beneficiaries?.contingent_beneficiaries || []).join(', '),\n    \n    // Estate Information\n    estate_value: extractedData.estate_details?.estate_value || '',\n    estate_complexity: extractedData.estate_details?.estate_complexity || '',\n    \n    // Real Estate\n    has_real_estate: extractedData.assets?.real_estate?.has_real_estate || 'No',\n    number_of_properties: extractedData.assets?.real_estate?.number_of_properties || 0,\n    property_locations: (extractedData.assets?.real_estate?.other_properties_locations || []).join(', '),\n    \n    // Entity Formation\n    llc_formation_interest: extractedData.planning_needs?.llc_formation_interest || 'No',\n    entity_type_needed: extractedData.planning_needs?.entity_type_needed || 'None',\n    \n    // Planning Documents Needed\n    needs_will: extractedData.planning_needs?.needs_will || '',\n    needs_trust: extractedData.planning_needs?.needs_trust || '',\n    trust_type: extractedData.planning_needs?.needs_trust?.includes('Yes') ? \n                 extractedData.planning_needs?.needs_trust : '',\n    needs_poa: extractedData.planning_needs?.needs_power_of_attorney || '',\n    needs_healthcare_directive: extractedData.planning_needs?.needs_healthcare_directive || '',\n    \n    // Family Information\n    children_count: extractedData.family_dynamics?.children_count || 0,\n    minor_children: extractedData.family_dynamics?.minor_children || 'No',\n    \n    // Additional Assets\n    retirement_accounts: extractedData.assets?.financial_assets?.retirement_accounts || '',\n    life_insurance: extractedData.assets?.financial_assets?.life_insurance || '',\n    business_ownership: extractedData.assets?.financial_assets?.business_ownership || '',\n    \n    // Urgency and Timeline\n    urgency_level: extractedData.urgency_timeline?.urgency_level || 'Medium',\n    timeline_driver: extractedData.urgency_timeline?.timeline_driver || '',\n    desired_completion: extractedData.urgency_timeline?.desired_completion || '',\n    \n    // Comprehensive Notes Section\n    notes: `**ESTATE PLANNING ANALYSIS**\\n\\n` +\n           `**Client Information:**\\n` +\n           `- Name: ${extractedData.client_info?.name}\\n` +\n           `- Age: ${extractedData.client_info?.age || 'Not specified'}\\n` +\n           `- State: ${extractedData.client_info?.state_of_residence || 'Not specified'}\\n` +\n           `- Marital Status: ${extractedData.client_info?.marital_status || 'Not specified'}\\n` +\n           `- Spouse: ${extractedData.client_info?.spouse_name || 'N/A'}\\n\\n` +\n           \n           `**Estate Overview:**\\n` +\n           `- Total Estate Value: ${extractedData.estate_details?.estate_value || 'Not disclosed'}\\n` +\n           `- Complexity: ${extractedData.estate_details?.estate_complexity || 'Not assessed'}\\n\\n` +\n           \n           `**Beneficiaries (${extractedData.beneficiaries?.number_of_beneficiaries || 0} total):**\\n` +\n           `- Primary: ${(extractedData.beneficiaries?.primary_beneficiaries || []).join(', ') || 'Not specified'}\\n` +\n           `- Contingent: ${(extractedData.beneficiaries?.contingent_beneficiaries || []).join(', ') || 'None'}\\n\\n` +\n           \n           `**Real Estate Holdings:**\\n` +\n           `- Has Real Estate: ${extractedData.assets?.real_estate?.has_real_estate}\\n` +\n           `- Number of Properties: ${extractedData.assets?.real_estate?.number_of_properties}\\n` +\n           `- Locations: ${(extractedData.assets?.real_estate?.other_properties_locations || []).join(', ') || 'Not specified'}\\n\\n` +\n           \n           `**Financial Assets:**\\n` +\n           `- Retirement Accounts: ${extractedData.assets?.financial_assets?.retirement_accounts || 'Not mentioned'}\\n` +\n           `- Investment Accounts: ${extractedData.assets?.financial_assets?.investment_accounts || 'Not mentioned'}\\n` +\n           `- Life Insurance: ${extractedData.assets?.financial_assets?.life_insurance || 'Not mentioned'}\\n` +\n           `- Business Ownership: ${extractedData.assets?.financial_assets?.business_ownership || 'No'}\\n\\n` +\n           \n           `**Planning Needs:**\\n` +\n           `- Will: ${extractedData.planning_needs?.needs_will}\\n` +\n           `- Trust: ${extractedData.planning_needs?.needs_trust}\\n` +\n           `- Power of Attorney: ${extractedData.planning_needs?.needs_power_of_attorney}\\n` +\n           `- Healthcare Directive: ${extractedData.planning_needs?.needs_healthcare_directive}\\n` +\n           `- LLC/Entity Formation: ${extractedData.planning_needs?.llc_formation_interest}\\n` +\n           `- Tax Planning: ${extractedData.planning_needs?.tax_planning_needed || 'Not discussed'}\\n\\n` +\n           \n           `**Family Dynamics:**\\n` +\n           `- Children: ${extractedData.family_dynamics?.children_count || 0}\\n` +\n           `- Minor Children: ${extractedData.family_dynamics?.minor_children}\\n` +\n           `- Special Circumstances: ${extractedData.family_dynamics?.special_circumstances || 'None noted'}\\n\\n` +\n           \n           `**Key Concerns:**\\n` +\n           (extractedData.advisor_notes?.key_concerns || []).map(c => `- ${c}`).join('\\n') + '\\n\\n' +\n           \n           `**Action Items:**\\n` +\n           (extractedData.advisor_notes?.action_items || []).map(a => `- ${a}`).join('\\n') + '\\n\\n' +\n           \n           `**Notable Quotes:**\\n` +\n           (extractedData.extracted_quotes || []).map(q => `\"${q}\"`).join('\\n') + '\\n\\n' +\n           \n           `**Source:** ${originalData.fileName}\\n` +\n           `**Processed:** ${new Date().toISOString()}`,\n    \n    // Metadata\n    source_file: originalData.fileName,\n    batch_processed: true,\n    extraction_status: 'completed',\n    processed_at: new Date().toISOString(),\n    \n    // Store full extracted data for reference\n    _fullExtractedData: extractedData\n  };\n  \n  return [{\n    json: notionRecord\n  }];\n  \n} catch (error) {\n  console.error('Error parsing data for', originalData.fileName, ':', error.message);\n  return [{\n    json: {\n      deal_id: originalData.deal_id,\n      lead: originalData.clientName,\n      stage: 'No Show',\n      notes: `ERROR: Failed to process transcript. ${error.message}`,\n      source_file: originalData.fileName,\n      extraction_status: 'failed',\n      error: error.message\n    }\n  }];\n}"
+      }
+    },
+    {
+      "id": "9",
+      "name": "Update Notion Database",
+      "type": "n8n-nodes-base.notion",
+      "position": [1700, 200],
+      "parameters": {
+        "resource": "page",
+        "operation": "create",
+        "databaseId": "YOUR_NOTION_DATABASE_ID",
+        "properties": {
+          "deal_id": {
+            "number": "={{$json.deal_id}}"
+          },
+          "Date": {
+            "date": {
+              "start": "={{$json.date}}"
+            }
+          },
+          "Lead": {
+            "title": [
+              {
+                "text": {
+                  "content": "={{$json.lead}}"
+                }
+              }
+            ]
+          },
+          "Stage": {
+            "select": {
+              "name": "={{$json.stage}}"
+            }
+          },
+          "Demo Requested": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.demo_requested}}"
+                }
+              }
+            ]
+          },
+          "Objection": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.objection}}"
+                }
+              }
+            ]
+          },
+          "Reason": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.reason}}"
+                }
+              }
+            ]
+          },
+          "Payment": {
+            "number": "={{$json.payment}}"
+          },
+          "Deposit": {
+            "number": "={{$json.deposit}}"
+          },
+          "Notes": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.notes}}"
+                }
+              }
+            ]
+          },
+          "State": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.state_of_residence}}"
+                }
+              }
+            ]
+          },
+          "Marital Status": {
+            "select": {
+              "name": "={{$json.marital_status || 'Unknown'}}"
+            }
+          },
+          "Age": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.age}}"
+                }
+              }
+            ]
+          },
+          "Beneficiaries Count": {
+            "number": "={{$json.number_of_beneficiaries}}"
+          },
+          "Estate Value": {
+            "rich_text": [
+              {
+                "text": {
+                  "content": "={{$json.estate_value}}"
+                }
+              }
+            ]
+          },
+          "Real Estate": {
+            "checkbox": "={{$json.has_real_estate === 'Yes'}}"
+          },
+          "Properties Count": {
+            "number": "={{$json.number_of_properties}}"
+          },
+          "LLC Interest": {
+            "checkbox": "={{$json.llc_formation_interest === 'Yes'}}"
+          },
+          "Urgency": {
+            "select": {
+              "name": "={{$json.urgency_level}}"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "10",
+      "name": "Log Progress",
+      "type": "n8n-nodes-base.function",
+      "position": [1900, 200],
+      "parameters": {
+        "functionCode": "// Log progress\nconst data = items[0].json;\nconsole.log(`✅ Processed: ${data.lead} - ${data.source_file}`);\nconsole.log(`   Estate Value: ${data.estate_value || 'Not disclosed'}`);\nconsole.log(`   Beneficiaries: ${data.number_of_beneficiaries}`);\nconsole.log(`   Stage: ${data.stage}`);\n\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "1": {
+      "main": [[{"node": "2", "type": "main", "index": 0}]]
+    },
+    "2": {
+      "main": [[{"node": "3", "type": "main", "index": 0}]]
+    },
+    "3": {
+      "main": [[{"node": "4", "type": "main", "index": 0}]]
+    },
+    "4": {
+      "main": [[{"node": "5", "type": "main", "index": 0}]]
+    },
+    "5": {
+      "main": [[{"node": "6", "type": "main", "index": 0}]]
+    },
+    "6": {
+      "main": [[{"node": "7", "type": "main", "index": 0}]]
+    },
+    "7": {
+      "main": [[{"node": "8", "type": "main", "index": 0}]]
+    },
+    "8": {
+      "main": [[{"node": "9", "type": "main", "index": 0}]]
+    },
+    "9": {
+      "main": [[{"node": "10", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}

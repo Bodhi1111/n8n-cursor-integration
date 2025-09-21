@@ -1,0 +1,232 @@
+{
+  "name": "Estate Planning Sales Pipeline - GPT-OSS:20B",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "path": "/Users/joshuavaughan/Documents/McAdams Transcripts",
+        "recursive": true,
+        "fileFilter": "*.txt"
+      },
+      "id": "read-files",
+      "name": "Read Transcript Files",
+      "type": "n8n-nodes-base.filesReadDirectory",
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-batch",
+      "name": "Process One at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.path }}",
+        "options": {}
+      },
+      "id": "read-content",
+      "name": "Read File Content",
+      "type": "n8n-nodes-base.filesReadBinary",
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:11434/api/generate",
+        "method": "POST",
+        "headers": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "type": "json",
+          "value": "{\n  \"model\": \"gpt-oss:20b\",\n  \"prompt\": \"You are an expert estate planning sales analyst. Analyze this meeting transcript with extreme attention to detail.\\n\\nCLASSIFICATION RULES:\\n- CLOSED WON: Client explicitly agreed to move forward, signed engagement, or made payment\\n- CLOSED LOST: Client explicitly declined, chose another provider, or stated they cannot afford services\\n- NO SHOW: Meeting didn't happen, client absent, or rescheduled\\n- FOLLOW UP: ANY meeting that went well but needs more discussion, information, or spouse consultation\\n\\nEXTRACT ALL FIELDS:\\n{\\n  \\\"client_name\\\": \\\"full name\\\",\\n  \\\"meeting_date\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"state\\\": \\\"2-letter code\\\",\\n  \\\"marital_status\\\": \\\"Single|Married|Divorced|Widowed\\\",\\n  \\\"age\\\": number or null,\\n  \\\"spouse_name\\\": \\\"name or null\\\",\\n  \\\"estate_value\\\": \\\"amount or range\\\",\\n  \\\"num_beneficiaries\\\": number,\\n  \\\"primary_beneficiaries\\\": \\\"names and relationships\\\",\\n  \\\"real_estate_count\\\": number,\\n  \\\"real_estate_locations\\\": \\\"city, state list\\\",\\n  \\\"llc_interest\\\": \\\"Yes|No|Maybe\\\",\\n  \\\"entity_type\\\": \\\"LLC|Trust|Corporation|None\\\",\\n  \\\"meeting_stage\\\": \\\"Closed Won|Closed Lost|No Show|Follow Up\\\",\\n  \\\"urgency_score\\\": 1-5,\\n  \\\"next_steps\\\": \\\"specific action items\\\",\\n  \\\"key_pain_points\\\": \\\"main concerns discussed\\\",\\n  \\\"decision_factors\\\": \\\"what influences their decision\\\",\\n  \\\"objections_raised\\\": \\\"concerns or hesitations\\\",\\n  \\\"follow_up_timeline\\\": \\\"when to follow up\\\",\\n  \\\"has_minor_children\\\": true|false,\\n  \\\"business_owner\\\": true|false,\\n  \\\"meeting_quality\\\": \\\"Excellent|Good|Fair|Poor\\\",\\n  \\\"advisor_notes\\\": \\\"strategic insights\\\"\\n}\\n\\nTranscript:\\n{{ $binary.data.toString() }}\\n\\nIMPORTANT: Return ONLY valid JSON, no explanations:\",\n  \"stream\": false,\n  \"temperature\": 0.1\n}"
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "gpt-extract",
+      "name": "Extract with GPT-OSS:20B",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "mode": "jsonToSingleItem",
+        "jsonString": "={{ JSON.parse($json.response).text.match(/{[\\s\\S]*}/)[0] }}"
+      },
+      "id": "parse-json",
+      "name": "Parse JSON Response",
+      "type": "n8n-nodes-base.set",
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost/api/database/rows/table/{{ $node['settings'].json.tableId }}/",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Token {{ $node['settings'].json.baserowToken }}"
+            }
+          ]
+        },
+        "body": {
+          "type": "json",
+          "value": "{\n  \"field_1\": \"={{ $json.client_name }}\",\n  \"field_2\": \"={{ $json.meeting_date }}\",\n  \"field_3\": \"={{ $json.state }}\",\n  \"field_4\": \"={{ $json.marital_status }}\",\n  \"field_5\": \"={{ $json.age }}\",\n  \"field_6\": \"={{ $json.spouse_name }}\",\n  \"field_7\": \"={{ $json.estate_value }}\",\n  \"field_8\": \"={{ $json.num_beneficiaries }}\",\n  \"field_9\": \"={{ $json.primary_beneficiaries }}\",\n  \"field_10\": \"={{ $json.real_estate_count }}\",\n  \"field_11\": \"={{ $json.real_estate_locations }}\",\n  \"field_12\": \"={{ $json.llc_interest }}\",\n  \"field_13\": \"={{ $json.entity_type }}\",\n  \"field_14\": \"={{ $json.meeting_stage }}\",\n  \"field_15\": \"={{ $json.urgency_score }}\",\n  \"field_16\": \"={{ $json.next_steps }}\",\n  \"field_17\": \"={{ $json.key_pain_points }}\",\n  \"field_18\": \"={{ $json.decision_factors }}\",\n  \"field_19\": \"={{ $json.objections_raised }}\",\n  \"field_20\": \"={{ $json.follow_up_timeline }}\",\n  \"field_21\": \"={{ $json.has_minor_children }}\",\n  \"field_22\": \"={{ $json.business_owner }}\",\n  \"field_23\": \"={{ $json.meeting_quality }}\",\n  \"field_24\": \"={{ $json.advisor_notes }}\",\n  \"field_25\": \"={{ $json.path }}\",\n  \"field_26\": \"Processed\"\n}"
+        }
+      },
+      "id": "create-baserow",
+      "name": "Create Baserow Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['parse-json'].json.meeting_stage }}",
+              "operation": "equals",
+              "value2": "Follow Up"
+            }
+          ]
+        }
+      },
+      "id": "check-followup",
+      "name": "Is Follow Up?",
+      "type": "n8n-nodes-base.if",
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:11434/api/generate",
+        "method": "POST",
+        "headers": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "type": "json",
+          "value": "{\n  \"model\": \"gpt-oss:20b\",\n  \"prompt\": \"You are an expert estate planning advisor writing a follow-up email. Generate a professional, personalized email based on this client information:\\n\\nClient: {{ $node['parse-json'].json.client_name }}\\nMarital Status: {{ $node['parse-json'].json.marital_status }}\\nSpouse: {{ $node['parse-json'].json.spouse_name }}\\nEstate Value: {{ $node['parse-json'].json.estate_value }}\\nKey Concerns: {{ $node['parse-json'].json.key_pain_points }}\\nDecision Factors: {{ $node['parse-json'].json.decision_factors }}\\nObjections: {{ $node['parse-json'].json.objections_raised }}\\nNext Steps: {{ $node['parse-json'].json.next_steps }}\\nFollow-up Timeline: {{ $node['parse-json'].json.follow_up_timeline }}\\nUrgency Level: {{ $node['parse-json'].json.urgency_score }}/5\\nHas Minor Children: {{ $node['parse-json'].json.has_minor_children }}\\nBusiness Owner: {{ $node['parse-json'].json.business_owner }}\\n\\nWrite a compelling follow-up email that:\\n1. Opens with a warm, specific reference to our meeting\\n2. Acknowledges their specific situation (family, business, estate)\\n3. Addresses any concerns or objections raised\\n4. Emphasizes the value and peace of mind\\n5. Provides clear next steps with 2 scheduling options\\n6. Includes appropriate urgency without being pushy\\n7. Closes with a personal touch\\n\\nTone: Professional yet warm, consultative not salesy\\nLength: 3-4 paragraphs plus signature\\n\\nEmail:\",\n  \"stream\": false,\n  \"temperature\": 0.7\n}"
+        }
+      },
+      "id": "generate-email",
+      "name": "Generate Follow-Up Email with GPT-OSS:20B",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost/api/database/rows/table/{{ $node['settings'].json.emailTableId }}/",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Token {{ $node['settings'].json.baserowToken }}"
+            }
+          ]
+        },
+        "body": {
+          "type": "json",
+          "value": "{\n  \"field_1\": \"={{ $node['parse-json'].json.client_name }}\",\n  \"field_2\": \"Following up on our estate planning discussion\",\n  \"field_3\": \"={{ JSON.parse($json.response).text }}\",\n  \"field_4\": \"Draft\",\n  \"field_5\": \"={{ new Date().toISOString() }}\",\n  \"field_6\": \"Follow Up\",\n  \"field_7\": \"={{ $node['create-baserow'].json.id }}\"\n}"
+        }
+      },
+      "id": "save-email",
+      "name": "Save Email to Baserow",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2050, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "tableId",
+              "value": "YOUR_MAIN_TABLE_ID"
+            },
+            {
+              "name": "emailTableId",
+              "value": "YOUR_EMAIL_TABLE_ID"
+            },
+            {
+              "name": "baserowToken",
+              "value": "YOUR_BASEROW_API_TOKEN"
+            }
+          ]
+        }
+      },
+      "id": "settings",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "position": [250, 100]
+    }
+  ],
+  "connections": {
+    "manual-trigger": {
+      "main": [[{"node": "read-files", "type": "main", "index": 0}]]
+    },
+    "read-files": {
+      "main": [[{"node": "split-batch", "type": "main", "index": 0}]]
+    },
+    "split-batch": {
+      "main": [[{"node": "read-content", "type": "main", "index": 0}]]
+    },
+    "read-content": {
+      "main": [[{"node": "gpt-extract", "type": "main", "index": 0}]]
+    },
+    "gpt-extract": {
+      "main": [[{"node": "parse-json", "type": "main", "index": 0}]]
+    },
+    "parse-json": {
+      "main": [[{"node": "create-baserow", "type": "main", "index": 0}]]
+    },
+    "create-baserow": {
+      "main": [[{"node": "check-followup", "type": "main", "index": 0}]]
+    },
+    "check-followup": {
+      "main": [
+        [{"node": "generate-email", "type": "main", "index": 0}],
+        [{"node": "split-batch", "type": "main", "index": 0}]
+      ]
+    },
+    "generate-email": {
+      "main": [[{"node": "save-email", "type": "main", "index": 0}]]
+    },
+    "save-email": {
+      "main": [[{"node": "split-batch", "type": "main", "index": 0}]]
+    }
+  }
+}
