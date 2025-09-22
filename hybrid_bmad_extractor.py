@@ -267,6 +267,72 @@ class HybridBMADExtractor:
         print("❌ No children count found via pattern matching")
         return None
 
+    def extract_deal_amount_pattern_matching(self, content: str) -> Tuple[Optional[int], Optional[int]]:
+        """Use pattern matching to find deal size and deposit amount for Closed Won sales"""
+
+        print("🔍 Pattern matching for deal amounts...")
+
+        # Look for pricing discussion near end of transcript (last 8000 characters)
+        pricing_section = content[-8000:]
+
+        print(f"🔍 Searching pricing section ({len(pricing_section)} chars)...")
+
+        deal_size = None
+        deposit_amount = None
+
+        # Deal size patterns - look for final quoted price
+        deal_patterns = [
+            r"bringing.*?balance.*?down.*?from.*?\$\d{1,3}(?:,\d{3})*.*?to\s+\$(\d{1,3}(?:,\d{3})*)",  # "bringing your balance down from $3,200 to $2,700"
+            r"balance.*?down.*?to\s+\$(\d{1,3}(?:,\d{3})*)",  # "balance down to $2,700"
+            r"discount.*?bringing.*?to\s+\$(\d{1,3}(?:,\d{3})*)",  # "discount, bringing your balance down from $3,200 to $2,700"
+            r"total.*?of\s+\$(\d{1,3}(?:,\d{3})*)",  # "total of $2,700"
+            r"balance.*?was\s+\$(\d{1,3}(?:,\d{3})*)",  # "The balance was $3,200"
+            r"That's.*?\$(\d{1,3}(?:,\d{3})*)",  # "That's going to bring your balance down to a very low. $3,200."
+        ]
+
+        # Extract all potential deal amounts and take the most recent/final one
+        deal_amounts = []
+        for pattern in deal_patterns:
+            matches = re.findall(pattern, pricing_section, re.IGNORECASE)
+            for match in matches:
+                try:
+                    amount = int(match.replace(',', ''))
+                    if 1000 <= amount <= 50000:  # Reasonable range for estate planning deals
+                        deal_amounts.append(amount)
+                except ValueError:
+                    continue
+
+        if deal_amounts:
+            deal_size = deal_amounts[-1]  # Take the last/most recent amount mentioned
+            print(f"✅ Found deal size via pattern: ${deal_size:,}")
+
+        # Deposit patterns - look for payment method discussion
+        deposit_patterns = [
+            r"visa|mastercard|discover|american\s+express",  # Credit card types indicate payment
+            r"credit\s+card",
+            r"card.*?numbers?",
+            r"expiration.*?date",
+            r"billing.*?address",
+        ]
+
+        payment_found = False
+        for pattern in deposit_patterns:
+            if re.search(pattern, pricing_section, re.IGNORECASE):
+                payment_found = True
+                break
+
+        # If payment method discussed and deal size found, assume full payment as deposit
+        if payment_found and deal_size:
+            deposit_amount = deal_size
+            print(f"✅ Found deposit amount via payment pattern: ${deposit_amount:,}")
+
+        if not deal_size:
+            print("❌ No deal size found via pattern matching")
+        if not deposit_amount:
+            print("❌ No deposit amount found via pattern matching")
+
+        return deal_size, deposit_amount
+
     def extract_estate_value_pattern_matching(self, content: str) -> Optional[int]:
         """Use pattern matching to find estate values"""
 
@@ -546,6 +612,9 @@ Return ONLY valid JSON. Be conservative - only include data you're very confiden
         # Phase 1: Pattern Matching (high accuracy, limited coverage)
         print("\n📋 Phase 1: Pattern Matching...")
 
+        # Extract deal amounts (only relevant for Closed Won meetings)
+        deal_size, deposit_amount = self.extract_deal_amount_pattern_matching(content)
+
         pattern_results = {
             'state': self.extract_state_pattern_matching(content),
             'age': self.extract_age_pattern_matching(content),
@@ -553,6 +622,8 @@ Return ONLY valid JSON. Be conservative - only include data you're very confiden
             'children_count': self.extract_children_count_pattern_matching(content),
             'estate_value': self.extract_estate_value_pattern_matching(content),
             'meeting_stage': self.extract_meeting_outcome_pattern_matching(content),
+            'deal_size': deal_size,
+            'deposit_amount': deposit_amount,
         }
 
         print(f"\n📊 Pattern Matching Results:")
@@ -581,6 +652,8 @@ Return ONLY valid JSON. Be conservative - only include data you're very confiden
             'objections': '',
             'urgency_score': 5,  # Default medium urgency
             'follow_up_required': True,
+            'deal_size': final_results.get('deal_size', 0),
+            'deposit_amount': final_results.get('deposit_amount', 0),
         }
 
         print(f"\n📈 FINAL EXTRACTION RESULTS:")

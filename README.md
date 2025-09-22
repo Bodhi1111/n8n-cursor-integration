@@ -282,7 +282,8 @@ npm run restart
 
 ## 🧪 Local Testing
 
-The `test-runner.js` script allows you to test your n8n Function node scripts locally:
+### Core Testing Scripts
+The project uses centralized testing to prevent file bloat:
 
 ```bash
 # Test all scripts
@@ -301,6 +302,33 @@ npm run batch:prepare
 npm run batch:report
 npm run batch:validate
 ```
+
+### Transcript Testing (Centralized Approach)
+**⚠️ IMPORTANT**: Use the centralized test runner to prevent test file bloat:
+
+```bash
+# Use centralized test runner for transcript processing
+python transcript_test_runner.py --transcript <file> --client <name>
+
+# Generate test report
+python transcript_test_runner.py --report
+
+# List all test results
+python transcript_test_runner.py --list
+
+# Clean old test results
+python transcript_test_runner.py --clean 7
+```
+
+### Core Test Files (Active)
+- `test_single_transcript_complete.py` - Complete transcript testing
+- `test_full_pipeline.py` - Full pipeline testing
+- `test_connections.py` - Connection testing
+- `test_minimal_baserow.py` - Minimal Baserow testing
+- `test_gpt_oss.py` - GPT OSS testing
+
+### Archived Test Files
+Individual client test files are archived in `test_files_archive/` to prevent project bloat. See `test_files_archive/README.md` for details.
 
 ## 📊 Baserow CRM Integration
 

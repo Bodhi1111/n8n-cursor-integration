@@ -1,0 +1,159 @@
+{
+  "meta": {
+    "instanceId": "vector-enhanced-estate-planning-workflow"
+  },
+  "nodes": [
+    {
+      "id": "transcript-trigger",
+      "name": "Transcript File Trigger",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "position": [100, 300],
+      "parameters": {
+        "path": "/home/node/host_mount/transcripts",
+        "events": ["add"],
+        "options": {
+          "awaitWriteFinish": true
+        },
+        "triggerOn": "folder"
+      }
+    },
+    {
+      "id": "read-transcript",
+      "name": "Read Transcript File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [300, 300],
+      "parameters": {
+        "fileSelector": "={{ $json.path }}"
+      }
+    },
+    {
+      "id": "extract-client-name",
+      "name": "Extract Client Name",
+      "type": "n8n-nodes-base.function",
+      "position": [500, 300],
+      "parameters": {
+        "functionCode": "// Extract client name from filename\nconst filePath = $input.first().json.path;\nconst fileName = filePath.split('/').pop();\nconst clientName = fileName.replace(': Estate Planning Advisor Meeting.txt', '').trim();\n\nreturn {\n  json: {\n    client_name: clientName,\n    file_path: filePath,\n    transcript_content: $input.first().binary.data.data.toString('utf8')\n  }\n};"
+      }
+    },
+    {
+      "id": "knowledge-graph-analysis",
+      "name": "Knowledge Graph Analysis",
+      "type": "n8n-nodes-base.function",
+      "position": [700, 300],
+      "parameters": {
+        "functionCode": "// Estate Planning Knowledge Graph Analysis\nconst content = $input.first().json.transcript_content.toLowerCase();\n\n// Domain knowledge patterns\nconst knowledgeBase = {\n  family_structures: {\n    blended_family: ['stepchildren', 'previous marriage', 'ex-wife', 'ex-husband', 'half-siblings'],\n    special_needs: ['special needs', 'disabled child', 'disability benefits', 'SSI', 'medicaid'],\n    minor_children: ['young children', 'minor children', 'under 18', 'guardianship'],\n    elderly_parents: ['aging parents', 'elderly mother', 'nursing home', 'long-term care']\n  },\n  business_structures: {\n    LLC: ['LLC', 'limited liability', 'operating agreement', 'member interests'],\n    S_Corp: ['S corp', 'S corporation', 'shareholder agreement', 'pass-through'],\n    C_Corp: ['C corp', 'double taxation', 'corporate minutes', 'board of directors'],\n    partnership: ['partnership', 'general partner', 'K-1', 'partnership interest']\n  },\n  urgency_factors: {\n    high: ['health issues', 'terminal illness', 'business sale', 'estate tax', 'immediate'],\n    medium: ['aging', 'retirement', 'wealth transfer', 'tax planning'],\n    low: ['young family', 'informational', 'future planning', 'education']\n  },\n  meeting_outcomes: {\n    closed_won: ['payment processed', 'moving forward', 'ready to start', 'building documents'],\n    follow_up: ['think about it', 'discuss with spouse', 'call back', 'need time'],\n    closed_lost: ['not interested', 'too expensive', 'not ready', 'maybe later']\n  }\n};\n\n// Calculate relevance scores\nfunction calculateRelevance(text, patterns) {\n  let score = 0;\n  for (const pattern of patterns) {\n    if (text.includes(pattern)) score += 1;\n  }\n  return score / patterns.length;\n}\n\n// Analyze context\nconst contextAnalysis = {\n  family_complexity: {},\n  business_complexity: {},\n  urgency_level: {},\n  meeting_outcome: {}\n};\n\n// Calculate scores for each category\nfor (const [category, subcategories] of Object.entries(knowledgeBase)) {\n  const targetCategory = category === 'family_structures' ? 'family_complexity' :\n                        category === 'business_structures' ? 'business_complexity' :\n                        category === 'urgency_factors' ? 'urgency_level' : 'meeting_outcome';\n  \n  for (const [subcat, patterns] of Object.entries(subcategories)) {\n    contextAnalysis[targetCategory][subcat] = calculateRelevance(content, patterns);\n  }\n}\n\n// Determine dominant patterns\nconst dominantFamily = Object.entries(contextAnalysis.family_complexity)\n  .reduce((a, b) => a[1] > b[1] ? a : b, ['unknown', 0]);\n\nconst dominantBusiness = Object.entries(contextAnalysis.business_complexity)\n  .reduce((a, b) => a[1] > b[1] ? a : b, ['none', 0]);\n\nconst dominantUrgency = Object.entries(contextAnalysis.urgency_level)\n  .reduce((a, b) => a[1] > b[1] ? a : b, ['medium', 0]);\n\nconst dominantOutcome = Object.entries(contextAnalysis.meeting_outcome)\n  .reduce((a, b) => a[1] > b[1] ? a : b, ['follow_up', 0]);\n\nreturn {\n  json: {\n    ...($input.first().json),\n    context_analysis: contextAnalysis,\n    dominant_patterns: {\n      family_type: dominantFamily[0],\n      family_confidence: dominantFamily[1],\n      business_type: dominantBusiness[0],\n      business_confidence: dominantBusiness[1],\n      urgency_level: dominantUrgency[0],\n      urgency_confidence: dominantUrgency[1],\n      meeting_outcome: dominantOutcome[0],\n      outcome_confidence: dominantOutcome[1]\n    }\n  }\n};"
+      }
+    },
+    {
+      "id": "create-vector-embeddings",
+      "name": "Create Vector Embeddings",
+      "type": "n8n-nodes-base.function",
+      "position": [900, 300],
+      "parameters": {
+        "functionCode": "// Prepare transcript for vector embedding\nconst transcriptData = $input.first().json;\n\n// Create structured document for embedding\nconst embeddingDocument = {\n  client_name: transcriptData.client_name,\n  content_summary: `Estate planning consultation for ${transcriptData.client_name}`,\n  family_context: transcriptData.dominant_patterns.family_type,\n  business_context: transcriptData.dominant_patterns.business_type,\n  urgency_context: transcriptData.dominant_patterns.urgency_level,\n  meeting_outcome: transcriptData.dominant_patterns.meeting_outcome,\n  full_transcript: transcriptData.transcript_content.substring(0, 8000), // Limit for embedding\n  metadata: {\n    file_path: transcriptData.file_path,\n    processed_date: new Date().toISOString(),\n    family_confidence: transcriptData.dominant_patterns.family_confidence,\n    business_confidence: transcriptData.dominant_patterns.business_confidence,\n    urgency_confidence: transcriptData.dominant_patterns.urgency_confidence,\n    outcome_confidence: transcriptData.dominant_patterns.outcome_confidence\n  }\n};\n\nreturn {\n  json: {\n    ...transcriptData,\n    embedding_document: embeddingDocument,\n    vector_text: JSON.stringify(embeddingDocument)\n  }\n};"
+      }
+    },
+    {
+      "id": "mistral-embeddings",
+      "name": "Mistral Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsMistralCloud",
+      "position": [1100, 400],
+      "parameters": {},
+      "credentials": {
+        "mistralCloudApi": {
+          "id": "EIl2QxhXAS9Hkg37",
+          "name": "Mistral Cloud account"
+        }
+      }
+    },
+    {
+      "id": "store-in-qdrant",
+      "name": "Store in Qdrant Vector DB",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "position": [1300, 400],
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "mode": "id",
+          "value": "estate_planning_transcripts"
+        }
+      },
+      "credentials": {
+        "qdrantApi": {
+          "id": "NyinAS3Pgfik66w5",
+          "name": "QdrantApi account"
+        }
+      }
+    },
+    {
+      "id": "vector-similarity-search",
+      "name": "Vector Similarity Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [900, 500],
+      "parameters": {
+        "url": "http://qdrant:6333/collections/estate_planning_transcripts/points/search",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ $json.embedding_vector }},\n  \"limit\": 5,\n  \"score_threshold\": 0.7,\n  \"with_payload\": true\n}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi"
+      },
+      "credentials": {
+        "qdrantApi": {
+          "id": "NyinAS3Pgfik66w5",
+          "name": "QdrantApi account"
+        }
+      }
+    },
+    {
+      "id": "context-enhanced-prompt",
+      "name": "Create Context-Enhanced Prompt",
+      "type": "n8n-nodes-base.function",
+      "position": [1100, 300],
+      "parameters": {
+        "functionCode": "// Create enhanced prompt with context and similar cases\nconst data = $input.first().json;\nconst similarCases = $('Vector Similarity Search').first()?.json?.result || [];\n\n// Build context from similar cases\nlet similarCasesContext = '';\nif (similarCases.length > 0) {\n  similarCasesContext = `\\nSIMILAR CASES FOR REFERENCE:\\n`;\n  similarCases.forEach((case_, idx) => {\n    const payload = case_.payload;\n    similarCasesContext += `${idx + 1}. ${payload.client_name}: ${payload.family_context} family, ${payload.business_context} business, ${payload.urgency_context} urgency, outcome: ${payload.meeting_outcome}\\n`;\n  });\n}\n\n// Create enhanced prompt\nconst enhancedPrompt = `You are a Senior Estate Planning Attorney with 25+ years of experience.\n\nCONTEXT ANALYSIS FOR ${data.client_name}:\n- Family Structure: ${data.dominant_patterns.family_type} (confidence: ${(data.dominant_patterns.family_confidence * 100).toFixed(1)}%)\n- Business Complexity: ${data.dominant_patterns.business_type} (confidence: ${(data.dominant_patterns.business_confidence * 100).toFixed(1)}%)\n- Urgency Level: ${data.dominant_patterns.urgency_level} (confidence: ${(data.dominant_patterns.urgency_confidence * 100).toFixed(1)}%)\n- Predicted Outcome: ${data.dominant_patterns.meeting_outcome} (confidence: ${(data.dominant_patterns.outcome_confidence * 100).toFixed(1)}%)\n${similarCasesContext}\nBased on this context analysis and similar cases, extract the following with MAXIMUM ACCURACY:\n\nTRANSCRIPT:\n${data.transcript_content.substring(0, 6000)}\n\nEXTRACT EXACTLY:\n{\n  \"client_name\": \"${data.client_name}\",\n  \"state\": \"Full state name where client is located\",\n  \"marital_status\": \"Single/Married/Divorced/Widowed\",\n  \"children_count\": \"Exact number of children\",\n  \"estate_value\": \"Total estate value in dollars\",\n  \"business_entities\": \"Number of business interests (LLCs, Corps, etc.)\",\n  \"meeting_stage\": \"Closed Won/Follow Up/Closed Lost\",\n  \"urgency_score\": \"1-10 rating\",\n  \"pain_points\": \"Primary client concerns\",\n  \"objections\": \"Any resistance or concerns\",\n  \"context_validation\": {\n    \"family_structure_confirmed\": \"true/false - does extraction match context analysis\",\n    \"business_structure_confirmed\": \"true/false - does extraction match context analysis\",\n    \"urgency_confirmed\": \"true/false - does extraction match context analysis\",\n    \"outcome_confirmed\": \"true/false - does extraction match predicted outcome\"\n  },\n  \"confidence_scores\": {\n    \"overall\": \"1-10 overall confidence\",\n    \"state\": \"1-10\",\n    \"marital_status\": \"1-10\",\n    \"children_count\": \"1-10\",\n    \"estate_value\": \"1-10\",\n    \"meeting_stage\": \"1-10\"\n  }\n}\n\nReturn ONLY valid JSON. Use context analysis to guide extraction accuracy.`;\n\nreturn {\n  json: {\n    ...data,\n    enhanced_prompt: enhancedPrompt,\n    similar_cases_count: similarCases.length\n  }\n};"
+      }
+    },
+    {
+      "id": "enhanced-ollama-extraction",
+      "name": "Enhanced Ollama Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 300],
+      "parameters": {
+        "url": "http://localhost:11434/api/generate",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-oss:20b\",\n  \"prompt\": \"{{ $json.enhanced_prompt }}\",\n  \"temperature\": 0.1,\n  \"stream\": false\n}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "validate-extraction",
+      "name": "Validate Extraction with Context",
+      "type": "n8n-nodes-base.function",
+      "position": [1500, 300],
+      "parameters": {
+        "functionCode": "// Validate extraction against context analysis\nconst data = $input.first().json;\nconst ollamaResponse = $('Enhanced Ollama Extraction').first().json.response;\n\n// Extract JSON from Ollama response\nlet extractedData;\ntry {\n  const jsonMatch = ollamaResponse.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    extractedData = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON found in response');\n  }\n} catch (error) {\n  console.log('Extraction failed, using fallback:', error.message);\n  extractedData = {\n    client_name: data.client_name,\n    state: null,\n    marital_status: 'Unknown',\n    children_count: 0,\n    estate_value: 0,\n    business_entities: 0,\n    meeting_stage: data.dominant_patterns.meeting_outcome === 'closed_won' ? 'Closed Won' : 'Follow Up',\n    urgency_score: data.dominant_patterns.urgency_level === 'high' ? 8 : 5,\n    pain_points: 'Estate planning consultation',\n    objections: '',\n    context_validation: {\n      family_structure_confirmed: false,\n      business_structure_confirmed: false,\n      urgency_confirmed: false,\n      outcome_confirmed: false\n    },\n    confidence_scores: {\n      overall: 3,\n      state: 1,\n      marital_status: 1,\n      children_count: 1,\n      estate_value: 1,\n      meeting_stage: 5\n    }\n  };\n}\n\n// Validate against context analysis\nconst validation = {\n  context_match_score: 0,\n  validation_flags: [],\n  quality_score: 0\n};\n\n// Check family structure consistency\nif (data.dominant_patterns.family_type === 'blended_family' && extractedData.children_count > 0) {\n  validation.context_match_score += 25;\n  validation.validation_flags.push('Family structure consistent with blended family indicators');\n}\n\n// Check business structure consistency\nif (data.dominant_patterns.business_type !== 'none' && extractedData.business_entities > 0) {\n  validation.context_match_score += 25;\n  validation.validation_flags.push('Business entities consistent with business complexity indicators');\n}\n\n// Check urgency consistency\nconst urgencyMatch = (\n  (data.dominant_patterns.urgency_level === 'high' && extractedData.urgency_score >= 7) ||\n  (data.dominant_patterns.urgency_level === 'medium' && extractedData.urgency_score >= 4 && extractedData.urgency_score <= 7) ||\n  (data.dominant_patterns.urgency_level === 'low' && extractedData.urgency_score <= 4)\n);\nif (urgencyMatch) {\n  validation.context_match_score += 25;\n  validation.validation_flags.push('Urgency score consistent with context indicators');\n}\n\n// Check outcome consistency\nconst outcomeMap = {\n  'closed_won': 'Closed Won',\n  'follow_up': 'Follow Up',\n  'closed_lost': 'Closed Lost'\n};\nif (outcomeMap[data.dominant_patterns.meeting_outcome] === extractedData.meeting_stage) {\n  validation.context_match_score += 25;\n  validation.validation_flags.push('Meeting outcome consistent with conversation patterns');\n}\n\n// Calculate overall quality score\nconst avgConfidence = Object.values(extractedData.confidence_scores)\n  .filter(score => typeof score === 'number')\n  .reduce((sum, score) => sum + score, 0) / 6;\n\nvalidation.quality_score = (validation.context_match_score * 0.6) + (avgConfidence * 10 * 0.4);\n\nreturn {\n  json: {\n    ...data,\n    extracted_data: extractedData,\n    validation: validation,\n    processing_metadata: {\n      processing_timestamp: new Date().toISOString(),\n      similar_cases_used: data.similar_cases_count || 0,\n      context_enhanced: true,\n      vector_processed: true\n    }\n  }\n};"
+      }
+    },
+    {
+      "id": "format-for-baserow",
+      "name": "Format for Baserow CRM",
+      "type": "n8n-nodes-base.function",
+      "position": [1700, 300],
+      "parameters": {
+        "functionCode": "// Format validated data for Baserow CRM\nconst data = $input.first().json;\nconst extracted = data.extracted_data;\n\n// Baserow field mappings\nconst fieldMappings = {\n  lead_name: 6755,\n  meeting_stage: 6756,\n  marital_status: 6757,\n  children_count: 6758,\n  estate_value: 6759,\n  real_estate_count: 6760,\n  llc_interest: 6761,\n  pain_points: 6762,\n  objections: 6763,\n  urgency_score: 6764,\n  follow_up_required: 6765,\n  transcript_file: 6766,\n  processed_date: 6767,\n  state: 6768\n};\n\n// Option ID mappings\nconst maritalStatusMap = {\n  'Single': 2988,\n  'Married': 2989,\n  'Widowed': 2990,\n  'Divorced': 2991\n};\n\nconst meetingStageMap = {\n  'Closed Won': 2984,\n  'Closed Lost': 2985,\n  'No Show': 2986,\n  'Follow Up': 2987\n};\n\n// Create Baserow payload\nconst baserowPayload = {\n  [`field_${fieldMappings.lead_name}`]: extracted.client_name,\n  [`field_${fieldMappings.meeting_stage}`]: meetingStageMap[extracted.meeting_stage] || 2987,\n  [`field_${fieldMappings.marital_status}`]: maritalStatusMap[extracted.marital_status] || null,\n  [`field_${fieldMappings.children_count}`]: extracted.children_count || 0,\n  [`field_${fieldMappings.estate_value}`]: extracted.estate_value || 0,\n  [`field_${fieldMappings.real_estate_count}`]: 1, // Default assumption\n  [`field_${fieldMappings.llc_interest}`]: extracted.business_entities || 0,\n  [`field_${fieldMappings.pain_points}`]: extracted.pain_points || 'Estate planning consultation',\n  [`field_${fieldMappings.objections}`]: extracted.objections || '',\n  [`field_${fieldMappings.urgency_score}`]: extracted.urgency_score || 5,\n  [`field_${fieldMappings.follow_up_required}`]: extracted.meeting_stage !== 'Closed Won',\n  [`field_${fieldMappings.transcript_file}`]: `${extracted.client_name}: Estate Planning Advisor Meeting.txt`,\n  [`field_${fieldMappings.processed_date}`]: new Date().toISOString().split('T')[0]\n  // Note: State mapping would need full state option IDs\n};\n\nreturn {\n  json: {\n    baserow_payload: baserowPayload,\n    quality_metadata: {\n      context_match_score: data.validation.context_match_score,\n      quality_score: data.validation.quality_score,\n      validation_flags: data.validation.validation_flags,\n      confidence_scores: extracted.confidence_scores,\n      vector_enhanced: true,\n      processing_timestamp: data.processing_metadata.processing_timestamp\n    },\n    original_data: data\n  }\n};"
+      }
+    },
+    {
+      "id": "quality-gate",
+      "name": "Quality Gate Check",
+      "type": "n8n-nodes-base.if",
+      "position": [1900, 300],
+      "parameters": {
+        "conditions": {\n          \"combinator\": \"and\",\n          \"conditions\": [\n            {\n              \"operator\": {\n                \"type\": \"number\",\n                \"operation\": \"gte\"\n              },\n              \"leftValue\": \"={{ $json.quality_metadata.quality_score }}\",\n              \"rightValue\": 60\n            }\n          ]\n        }\n      }\n    },\n    {\n      \"id\": \"update-baserow\",\n      \"name\": \"Update Baserow CRM\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"position\": [2100, 250],\n      \"parameters\": {\n        \"url\": \"http://localhost/api/database/rows/table/698/\",\n        \"method\": \"POST\",\n        \"sendBody\": true,\n        \"specifyBody\": \"json\",\n        \"jsonBody\": \"={{ $json.baserow_payload }}\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"httpHeaderAuth\": {\n          \"name\": \"Authorization\",\n          \"value\": \"Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA\"\n        }\n      }\n    },\n    {\n      \"id\": \"manual-review-queue\",\n      \"name\": \"Add to Manual Review Queue\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"position\": [2100, 350],\n      \"parameters\": {\n        \"url\": \"http://localhost/api/database/rows/table/699/\",\n        \"method\": \"POST\",\n        \"sendBody\": true,\n        \"specifyBody\": \"json\",\n        \"jsonBody\": \"={\n  \\\"field_6800\\\": \\\"{{ $json.original_data.extracted_data.client_name }}\\\",\n  \\\"field_6801\\\": \\\"Low Quality Score: {{ $json.quality_metadata.quality_score }}\\\",\n  \\\"field_6802\\\": \\\"{{ $json.quality_metadata.validation_flags.join(', ') }}\\\",\n  \\\"field_6803\\\": \\\"{{ new Date().toISOString().split('T')[0] }}\\\"\n}\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"httpHeaderAuth\": {\n          \"name\": \"Authorization\",\n          \"value\": \"Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA\"\n        }\n      }\n    },\n    {\n      \"id\": \"processing-complete\",\n      \"name\": \"Processing Complete\",\n      \"type\": \"n8n-nodes-base.noOp\",\n      \"position\": [2300, 300],\n      \"parameters\": {}\n    }\n  ],\n  \"connections\": {\n    \"transcript-trigger\": {\n      \"main\": [[\n        {\n          \"node\": \"read-transcript\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"read-transcript\": {\n      \"main\": [[\n        {\n          \"node\": \"extract-client-name\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"extract-client-name\": {\n      \"main\": [[\n        {\n          \"node\": \"knowledge-graph-analysis\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"knowledge-graph-analysis\": {\n      \"main\": [[\n        {\n          \"node\": \"create-vector-embeddings\",\n          \"type\": \"main\",\n          \"index\": 0\n        },\n        {\n          \"node\": \"vector-similarity-search\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"create-vector-embeddings\": {\n      \"main\": [[\n        {\n          \"node\": \"context-enhanced-prompt\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"context-enhanced-prompt\": {\n      \"main\": [[\n        {\n          \"node\": \"enhanced-ollama-extraction\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"enhanced-ollama-extraction\": {\n      \"main\": [[\n        {\n          \"node\": \"validate-extraction\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"validate-extraction\": {\n      \"main\": [[\n        {\n          \"node\": \"format-for-baserow\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"format-for-baserow\": {\n      \"main\": [[\n        {\n          \"node\": \"quality-gate\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"quality-gate\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"update-baserow\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"manual-review-queue\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"update-baserow\": {\n      \"main\": [[\n        {\n          \"node\": \"processing-complete\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"manual-review-queue\": {\n      \"main\": [[\n        {\n          \"node\": \"processing-complete\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    }\n  }\n}

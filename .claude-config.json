@@ -1,0 +1,60 @@
+{
+  "project_rules": {
+    "file_creation": {
+      "prevent_test_bloat": true,
+      "max_test_files": 5,
+      "use_centralized_testing": true,
+      "test_runner": "transcript_test_runner.py"
+    },
+    "transcript_processing": {
+      "use_existing_scripts": [
+        "test_single_transcript_complete.py",
+        "test_full_pipeline.py",
+        "test_connections.py"
+      ],
+      "avoid_creating_new_files": true,
+      "centralized_testing": true
+    },
+    "file_naming": {
+      "avoid_patterns": [
+        "test_*.py",
+        "debug_*.py",
+        "check_*.py",
+        "analyze_*.py",
+        "fix_*.py"
+      ],
+      "preferred_patterns": [
+        "use existing scripts",
+        "modify existing files",
+        "use centralized runner"
+      ]
+    }
+  },
+  "instructions": {
+    "for_claude_code": [
+      "DO NOT create new test files for each transcript",
+      "USE the existing test scripts instead",
+      "USE transcript_test_runner.py for new testing needs",
+      "MODIFY existing files rather than creating new ones",
+      "CHECK .gitignore before creating any files",
+      "ASK before creating files that match test patterns"
+    ]
+  },
+  "existing_test_scripts": [
+    "test_single_transcript_complete.py",
+    "test_full_pipeline.py", 
+    "test_connections.py",
+    "test_minimal_baserow.py",
+    "test_gpt_oss.py"
+  ],
+  "centralized_testing": {
+    "runner": "transcript_test_runner.py",
+    "usage": "python transcript_test_runner.py --transcript <file> --client <name>",
+    "benefits": [
+      "Prevents file bloat",
+      "Centralized test results",
+      "Automatic cleanup",
+      "Better organization"
+    ]
+  }
+}

@@ -52,3 +52,28 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Test files (prevent bloat from Claude Code)
+test_*.py
+*_test_*.py
+debug_*.py
+check_*.py
+analyze_*.py
+fix_*.py
+process_*.py
+enhanced_*.py
+hybrid_*.py
+advanced_*.py
+direct_*.py
+execute_*.py
+configure_*.py
+update_*.py
+add_*.py
+complete_*.py
+
+# Test results and temporary data
+test_results/
+*.test.json
+*.debug.json
+current_fields.json
+processing-report.json

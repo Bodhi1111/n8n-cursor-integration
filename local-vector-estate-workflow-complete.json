@@ -1,0 +1,361 @@
+{
+  "name": "Local Vector Estate Planning Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/home/node/host_mount/transcripts",
+        "events": [
+          "add"
+        ],
+        "options": {
+          "awaitWriteFinish": true
+        },
+        "triggerOn": "folder"
+      },
+      "id": "transcript-trigger",
+      "name": "Transcript File Trigger",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.path }}"
+      },
+      "id": "read-transcript",
+      "name": "Read Transcript File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract client name from filename\nconst filePath = $input.first().json.path;\nconst fileName = filePath.split('/').pop();\nconst clientName = fileName.replace(': Estate Planning Advisor Meeting.txt', '').trim();\n\nreturn {\n  json: {\n    client_name: clientName,\n    file_path: filePath,\n    transcript_content: $input.first().binary.data.data.toString('utf8')\n  }\n};"
+      },
+      "id": "extract-client-name",
+      "name": "Extract Client Name",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Estate Planning Knowledge Graph Analysis (Local)\nconst content = $input.first().json.transcript_content.toLowerCase();\n\n// Enhanced domain knowledge patterns\nconst knowledgeBase = {\n  family_structures: {\n    blended_family: {\n      patterns: ['stepchildren', 'previous marriage', 'ex-wife', 'ex-husband', 'half-siblings'],\n      weight: 1.5,\n      planning_impact: 'high'\n    },\n    special_needs: {\n      patterns: ['special needs', 'disabled child', 'disability benefits', 'SSI', 'medicaid'],\n      weight: 2.0,\n      planning_impact: 'critical'\n    },\n    minor_children: {\n      patterns: ['young children', 'minor children', 'under 18', 'guardianship'],\n      weight: 1.2,\n      planning_impact: 'medium'\n    }\n  },\n  business_structures: {\n    LLC: {\n      patterns: ['LLC', 'limited liability company', 'operating agreement', 'member interests'],\n      complexity_score: 6\n    },\n    S_Corp: {\n      patterns: ['S corp', 'S corporation', 'shareholder agreement', 'pass-through'],\n      complexity_score: 7\n    }\n  },\n  urgency_factors: {\n    high: {\n      patterns: ['health issues', 'business sale', 'estate tax'],\n      score: 7\n    },\n    medium: {\n      patterns: ['aging', 'retirement planning', 'tax planning'],\n      score: 5\n    }\n  }\n};\n\n// Calculate relevance scores\nfunction calculateRelevance(text, categoryData) {\n  const results = {};\n  \n  for (const [subcat, config] of Object.entries(categoryData)) {\n    let score = 0;\n    \n    for (const pattern of config.patterns) {\n      if (text.includes(pattern)) {\n        score += 1;\n      }\n    }\n    \n    const weight = config.weight || 1;\n    results[subcat] = {\n      score: (score / config.patterns.length) * weight,\n      metadata: config\n    };\n  }\n  \n  return results;\n}\n\n// Analyze context\nconst analysis = {\n  family: calculateRelevance(content, knowledgeBase.family_structures),\n  business: calculateRelevance(content, knowledgeBase.business_structures),\n  urgency: calculateRelevance(content, knowledgeBase.urgency_factors)\n};\n\n// Get dominant patterns\nfunction getDominant(categoryAnalysis) {\n  const entries = Object.entries(categoryAnalysis);\n  if (entries.length === 0) return ['unknown', 0];\n  \n  const dominant = entries.reduce((a, b) => a[1].score > b[1].score ? a : b);\n  return [dominant[0], dominant[1].score];\n}\n\nconst dominantFamily = getDominant(analysis.family);\nconst dominantBusiness = getDominant(analysis.business);\nconst dominantUrgency = getDominant(analysis.urgency);\n\nreturn {\n  json: {\n    ...($input.first().json),\n    context_analysis: analysis,\n    dominant_patterns: {\n      family_type: dominantFamily[0],\n      family_confidence: dominantFamily[1],\n      business_type: dominantBusiness[0],\n      business_confidence: dominantBusiness[1],\n      urgency_level: dominantUrgency[0],\n      urgency_confidence: dominantUrgency[1]\n    }\n  }\n};"
+      },
+      "id": "knowledge-graph-analysis",
+      "name": "Knowledge Graph Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:11434/api/embeddings",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"mistral:7b\",\n  \"prompt\": \"{{ $json.client_name }} estate planning: {{ $json.dominant_patterns.family_type }} family, {{ $json.dominant_patterns.business_type }} business. {{ $json.transcript_content.substring(0, 1000) }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "generate-embeddings",
+      "name": "Generate Local Embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:11434/api/generate",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"mistral:7b\",\n  \"prompt\": \"You are a Senior Estate Planning Attorney. Extract information from this transcript for {{ $json.client_name }}:\\n\\nCONTEXT:\\n- Family: {{ $json.dominant_patterns.family_type }}\\n- Business: {{ $json.dominant_patterns.business_type }}\\n- Urgency: {{ $json.dominant_patterns.urgency_level }}\\n\\nTRANSCRIPT:\\n{{ $json.transcript_content.substring(0, 4000) }}\\n\\nExtract JSON:\\n{\\n  \\\"client_name\\\": \\\"{{ $json.client_name }}\\\",\\n  \\\"state\\\": \\\"Full state name\\\",\\n  \\\"marital_status\\\": \\\"Single/Married/Divorced/Widowed\\\",\\n  \\\"children_count\\\": \\\"Number\\\",\\n  \\\"estate_value\\\": \\\"Dollar amount\\\",\\n  \\\"meeting_stage\\\": \\\"Closed Won/Follow Up/Closed Lost\\\",\\n  \\\"urgency_score\\\": \\\"1-10\\\",\\n  \\\"pain_points\\\": \\\"Primary concerns\\\",\\n  \\\"objections\\\": \\\"Any resistance\\\"\\n}\",\n  \"temperature\": 0.1,\n  \"stream\": false\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "local-mistral-extraction",
+      "name": "Local Mistral Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse and validate Mistral response\nconst data = $input.first().json;\nconst mistralResponse = $('Local Mistral Extraction').first().json.response;\n\n// Extract JSON from response\nlet extractedData;\ntry {\n  const jsonMatch = mistralResponse.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    extractedData = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON found');\n  }\n} catch (error) {\n  // Fallback data\n  extractedData = {\n    client_name: data.client_name,\n    state: null,\n    marital_status: 'Unknown',\n    children_count: 0,\n    estate_value: 0,\n    meeting_stage: 'Follow Up',\n    urgency_score: 5,\n    pain_points: 'Estate planning consultation',\n    objections: ''\n  };\n}\n\n// Calculate quality score\nlet qualityScore = 50; // Base score\n\n// Context validation bonuses\nif (data.dominant_patterns.family_confidence > 0.3) qualityScore += 15;\nif (data.dominant_patterns.business_confidence > 0.3) qualityScore += 15;\nif (data.dominant_patterns.urgency_confidence > 0.3) qualityScore += 10;\nif (extractedData.state && extractedData.state !== 'null') qualityScore += 10;\n\nreturn {\n  json: {\n    extracted_data: extractedData,\n    quality_score: Math.min(100, qualityScore),\n    context_enhanced: true,\n    original_data: data\n  }\n};"
+      },
+      "id": "validate-extraction",
+      "name": "Validate Extraction",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format for Baserow CRM\nconst data = $input.first().json;\nconst extracted = data.extracted_data;\n\n// Baserow field mappings\nconst maritalStatusMap = {\n  'Single': 2988,\n  'Married': 2989,\n  'Widowed': 2990,\n  'Divorced': 2991\n};\n\nconst meetingStageMap = {\n  'Closed Won': 2984,\n  'Closed Lost': 2985,\n  'Follow Up': 2987\n};\n\nconst baserowPayload = {\n  'field_6755': extracted.client_name,\n  'field_6756': meetingStageMap[extracted.meeting_stage] || 2987,\n  'field_6757': maritalStatusMap[extracted.marital_status] || null,\n  'field_6758': parseInt(extracted.children_count) || 0,\n  'field_6759': parseInt(extracted.estate_value) || 0,\n  'field_6760': 1,\n  'field_6761': 0,\n  'field_6762': extracted.pain_points || 'Estate planning consultation',\n  'field_6763': extracted.objections || '',\n  'field_6764': parseInt(extracted.urgency_score) || 5,\n  'field_6765': extracted.meeting_stage !== 'Closed Won',\n  'field_6766': `${extracted.client_name}: Estate Planning Advisor Meeting.txt`,\n  'field_6767': new Date().toISOString().split('T')[0]\n};\n\nreturn {\n  json: {\n    baserow_payload: baserowPayload,\n    quality_metadata: {\n      quality_score: data.quality_score,\n      context_enhanced: data.context_enhanced,\n      auto_approved: data.quality_score >= 70\n    }\n  }\n};"
+      },
+      "id": "format-for-baserow",
+      "name": "Format for Baserow",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "quality-check",
+              "leftValue": "={{ $json.quality_metadata.quality_score }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gte",
+                "rightType": "number"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "quality-gate",
+      "name": "Quality Gate (≥70)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost/api/database/rows/table/698/",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.baserow_payload }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA"
+        }
+      },
+      "id": "update-baserow",
+      "name": "Update Baserow CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1900,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost/api/database/rows/table/699/",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"field_6800\": \"{{ $json.baserow_payload.field_6755 }}\",\n  \"field_6801\": \"Quality Score: {{ $json.quality_metadata.quality_score }}/100\",\n  \"field_6802\": \"Context Enhanced: {{ $json.quality_metadata.context_enhanced }}\",\n  \"field_6803\": \"{{ new Date().toISOString().split('T')[0] }}\"\n}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA"
+        }
+      },
+      "id": "manual-review",
+      "name": "Manual Review Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1900,
+        350
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "processing-complete",
+      "name": "Processing Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "transcript-trigger": {
+      "main": [
+        [
+          {
+            "node": "read-transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "read-transcript": {
+      "main": [
+        [
+          {
+            "node": "extract-client-name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract-client-name": {
+      "main": [
+        [
+          {
+            "node": "knowledge-graph-analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "knowledge-graph-analysis": {
+      "main": [
+        [
+          {
+            "node": "generate-embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate-embeddings": {
+      "main": [
+        [
+          {
+            "node": "local-mistral-extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "local-mistral-extraction": {
+      "main": [
+        [
+          {
+            "node": "validate-extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate-extraction": {
+      "main": [
+        [
+          {
+            "node": "format-for-baserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format-for-baserow": {
+      "main": [
+        [
+          {
+            "node": "quality-gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "quality-gate": {
+      "main": [
+        [
+          {
+            "node": "update-baserow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "manual-review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-baserow": {
+      "main": [
+        [
+          {
+            "node": "processing-complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manual-review": {
+      "main": [
+        [
+          {
+            "node": "processing-complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "local-vector-enhanced-estate-planning"
+  },
+  "id": "local-vector-estate-workflow",
+  "tags": []
+}
