@@ -1,0 +1,130 @@
+{
+  "name": "BMAD Estate Planning Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "transcript_path",
+              "value": "/Users/joshuavaughan/Library/CloudStorage/GoogleDrive-jvaughan27@gmail.com/.shortcut-targets-by-id/1oyouGXIJLyId2y2H-JJVYay9GFpnLTDK/McAdams Transcripts"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [240, 280],
+      "id": "1a8b3c4d-5e6f-7890-1234-567890abcdef",
+      "name": "Set Variables"
+    },
+    {
+      "parameters": {
+        "command": "cd /Users/joshuavaughan/n8n-cursor-integration && node process-transcripts.js batch \"{{ $json.transcript_path }}\" 5"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 280],
+      "id": "2b9c4d5e-6f70-8901-2345-678901bcdefg",
+      "name": "Execute BMAD Processor"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the command output for processing results\nconst output = $input.first().json.stdout || '';\n\n// Extract JSON from the output\nlet results = [];\ntry {\n  const lines = output.split('\\n');\n  lines.forEach(line => {\n    if (line.includes('Result:')) {\n      const jsonStr = line.split('Result:')[1].trim();\n      try {\n        const result = JSON.parse(jsonStr);\n        results.push(result);\n      } catch (e) {\n        // Ignore parse errors\n      }\n    }\n  });\n} catch (error) {\n  results = [{ error: 'Failed to parse output', raw: output }];\n}\n\nreturn results.map(result => ({ json: result }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 280],
+      "id": "3c0d5e6f-7801-9012-3456-789012cdefgh",
+      "name": "Parse Results"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost/api/database/rows/table/698/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "field_6755",
+              "value": "={{ $json.data ? $json.data.client_name || $json.data.Name : 'Unknown Client' }}"
+            },
+            {
+              "name": "field_6756",
+              "value": "={{ $json.data ? $json.data.meeting_stage || 'Follow Up' : 'Follow Up' }}"
+            },
+            {
+              "name": "field_6764",
+              "value": "={{ $json.data ? parseInt($json.data.urgency_score) || 5 : 5 }}"
+            },
+            {
+              "name": "field_6765",
+              "value": "={{ $json.data ? Boolean($json.data.follow_up_required) : true }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 280],
+      "id": "4d1e6f70-8912-0123-4567-890123defghi",
+      "name": "Save to Baserow",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Execute BMAD Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute BMAD Processor": {
+      "main": [
+        [
+          {
+            "node": "Parse Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Results": {
+      "main": [
+        [
+          {
+            "node": "Save to Baserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "12345678-9abc-def0-1234-567890abcdef",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "bmad-estate-planning-processor",
+  "tags": []
+}

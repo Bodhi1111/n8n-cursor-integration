@@ -1,0 +1,20 @@
+{
+  "baserow": {
+    "url": "http://localhost",
+    "token": "h9JNHcGxmXZRIICUjpbHvVcKc5geaASA",
+    "database_id": "174",
+    "table_id": "698"
+  },
+  "ollama": {
+    "url": "http://localhost:11434",
+    "model": "llama2"
+  },
+  "webhook": {
+    "url": "http://localhost:5678/webhook/bmad-estate-planning",
+    "test_url": "http://localhost:5678/webhook-test/bmad-estate-planning"
+  },
+  "transcripts": {
+    "directory": "/Users/joshuavaughan/Library/CloudStorage/GoogleDrive-jvaughan27@gmail.com/.shortcut-targets-by-id/1oyouGXIJLyId2y2H-JJVYay9GFpnLTDK/McAdams Transcripts",
+    "total_count": 352
+  }
+}

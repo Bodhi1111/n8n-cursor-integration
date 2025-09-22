@@ -1,0 +1,300 @@
+{
+  "name": "BMAD Estate Planning - Working Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/estate-planning",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "estate-planning"
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "folderPath": "/Users/joshuavaughan/Library/CloudStorage/GoogleDrive-jvaughan27@gmail.com/.shortcut-targets-by-id/1oyouGXIJLyId2y2H-JJVYay9GFpnLTDK/McAdams Transcripts"
+      },
+      "id": "list-files",
+      "name": "List Transcript Files",
+      "type": "n8n-nodes-base.localFiles",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-batch",
+      "name": "Split Into Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "filePath": "={{$json[\"path\"]}}"
+      },
+      "id": "read-file",
+      "name": "Read Transcript",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "id": "to-text",
+      "name": "Convert to Text",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/generate",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "gpt-oss:20b"
+            },
+            {
+              "name": "prompt",
+              "value": "=\"You are an expert estate planning analyst. Extract the following from this transcript:\\n\\n- client_name\\n- meeting_stage (Initial Consultation, Follow Up, Closed Won, Closed Lost, No Show)\\n- marital_status (Single, Married, Divorced, Widowed)\\n- estate_value (number)\\n- urgency_score (1-10)\\n- key_pain_points\\n- follow_up_required (true/false)\\n\\nRespond with ONLY valid JSON.\\n\\nTranscript:\\n\" + $json[\"data\"].substring(0,3000)"
+            },
+            {
+              "name": "temperature",
+              "value": "0.1"
+            },
+            {
+              "name": "stream",
+              "value": "false"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        }
+      },
+      "id": "analyze-gpt",
+      "name": "Analyze with GPT-OSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "client_name",
+              "value": "={{JSON.parse($json[\"response\"])[\"client_name\"] || \"Unknown\"}}"
+            },
+            {
+              "name": "meeting_stage",
+              "value": "={{JSON.parse($json[\"response\"])[\"meeting_stage\"] || \"Initial Consultation\"}}"
+            },
+            {
+              "name": "marital_status",
+              "value": "={{JSON.parse($json[\"response\"])[\"marital_status\"] || \"Unknown\"}}"
+            },
+            {
+              "name": "pain_points",
+              "value": "={{JSON.parse($json[\"response\"])[\"key_pain_points\"] || \"\"}}"
+            }
+          ],
+          "number": [
+            {
+              "name": "estate_value",
+              "value": "={{JSON.parse($json[\"response\"])[\"estate_value\"] || 0}}"
+            },
+            {
+              "name": "urgency_score",
+              "value": "={{JSON.parse($json[\"response\"])[\"urgency_score\"] || 5}}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "follow_up_required",
+              "value": "={{JSON.parse($json[\"response\"])[\"follow_up_required\"] || true}}"
+            }
+          ]
+        }
+      },
+      "id": "parse-data",
+      "name": "Parse GPT Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost/api/database/rows/table/698/",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "field_6755",
+              "value": "={{$json[\"client_name\"]}}"
+            },
+            {
+              "name": "field_6756",
+              "value": "={{$json[\"meeting_stage\"]}}"
+            },
+            {
+              "name": "field_6757",
+              "value": "={{$json[\"marital_status\"]}}"
+            },
+            {
+              "name": "field_6759",
+              "value": "={{$json[\"estate_value\"]}}"
+            },
+            {
+              "name": "field_6762",
+              "value": "={{$json[\"pain_points\"]}}"
+            },
+            {
+              "name": "field_6764",
+              "value": "={{$json[\"urgency_score\"]}}"
+            },
+            {
+              "name": "field_6765",
+              "value": "={{$json[\"follow_up_required\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-baserow",
+      "name": "Save to Baserow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "List Transcript Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Transcript Files": {
+      "main": [
+        [
+          {
+            "node": "Split Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into Items": {
+      "main": [
+        [
+          {
+            "node": "Read Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Transcript": {
+      "main": [
+        [
+          {
+            "node": "Convert to Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Text": {
+      "main": [
+        [
+          {
+            "node": "Analyze with GPT-OSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze with GPT-OSS": {
+      "main": [
+        [
+          {
+            "node": "Parse GPT Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse GPT Response": {
+      "main": [
+        [
+          {
+            "node": "Save to Baserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1",
+  "id": "working-estate-pipeline",
+  "meta": {
+    "instanceId": "local"
+  },
+  "tags": []
+}

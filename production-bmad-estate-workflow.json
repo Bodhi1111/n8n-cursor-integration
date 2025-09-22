@@ -1,0 +1,418 @@
+{
+  "name": "Production BMAD Estate Planning Processor",
+  "description": "Enterprise-grade estate planning transcript processor with BMAD methodology, webhook automation, parallel processing, and comprehensive CRM integration",
+  "version": "3.0.0",
+  "meta": {
+    "instanceId": "production-bmad-estate",
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger - Auto Process",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 300],
+      "parameters": {
+        "path": "bmad-estate-processor",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "webhookId": "bmad-estate-processor"
+    },
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger - Batch Process",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [120, 200],
+      "parameters": {}
+    },
+    {
+      "id": "initialization",
+      "name": "Initialize Processing Config",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [340, 250],
+      "parameters": {
+        "functionCode": "// Initialize processing configuration\nconst input = $input.first().json;\n\n// Determine processing mode\nconst isWebhook = input.headers ? true : false;\nconst isBatchMode = !isWebhook;\n\n// Set transcript path\nlet transcriptPath;\nif (isWebhook && input.body?.transcript_path) {\n  transcriptPath = input.body.transcript_path;\n} else {\n  transcriptPath = \"/Users/joshuavaughan/Documents/McAdams Transcripts\";\n}\n\n// Processing configuration\nconst config = {\n  mode: isWebhook ? 'webhook' : 'batch',\n  transcriptPath: transcriptPath,\n  batchSize: input.body?.batch_size || 5,\n  parallelProcessing: input.body?.parallel || true,\n  bmadMode: input.body?.bmad_mode || 'enhanced',\n  retryAttempts: 3,\n  timeout: 300000, // 5 minutes\n  processedCount: 0,\n  errorCount: 0,\n  startTime: new Date().toISOString(),\n  sessionId: `bmad_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`\n};\n\n// Log session start\nconsole.log(`🚀 BMAD Estate Processing Session Started`);\nconsole.log(`   Session ID: ${config.sessionId}`);\nconsole.log(`   Mode: ${config.mode}`);\nconsole.log(`   Transcript Path: ${config.transcriptPath}`);\nconsole.log(`   BMAD Mode: ${config.bmadMode}`);\n\nreturn [{\n  json: {\n    ...config,\n    status: 'initialized',\n    stage: 'file_discovery'\n  }\n}];"
+      }
+    },
+    {
+      "id": "file-discovery",
+      "name": "Discover Transcript Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [560, 250],
+      "parameters": {
+        "command": "find",
+        "arguments": "={{ $json.transcriptPath }} -name '*.txt' -type f | head -n 352"
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "id": "file-processor",
+      "name": "Process File List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [780, 250],
+      "parameters": {
+        "functionCode": "// Process discovered files\nconst config = $input.first().json;\nconst fileOutput = $input.last()?.json;\n\nif (!fileOutput?.stdout) {\n  throw new Error('No transcript files found');\n}\n\nconst files = fileOutput.stdout.split('\\n').filter(f => f.trim().length > 0);\n\nif (files.length === 0) {\n  throw new Error('No valid transcript files discovered');\n}\n\n// Extract client information from filenames\nconst processedFiles = files.map((filePath, index) => {\n  const fileName = filePath.split('/').pop();\n  \n  // Enhanced client name extraction\n  let clientName = 'Unknown';\n  const patterns = [\n    /^([^:]+):/,           // Name: format\n    /^([^-]+)-/,           // Name- format\n    /^([^_]+)_/,           // Name_ format\n    /^(.+?)\\s+\\d{4}/,      // Name YYYY format\n  ];\n  \n  for (const pattern of patterns) {\n    const match = fileName.match(pattern);\n    if (match) {\n      clientName = match[1].trim();\n      break;\n    }\n  }\n  \n  // Extract potential dates\n  const dateMatches = fileName.match(/(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+\\d{1,2}(?:,\\s*\\d{4})?/i);\n  const extractedDate = dateMatches ? dateMatches[0] : null;\n  \n  return {\n    filePath: filePath.trim(),\n    fileName: fileName,\n    clientName: clientName,\n    extractedDate: extractedDate,\n    fileIndex: index + 1,\n    totalFiles: files.length,\n    dealId: 4000 + index, // Starting from a safe ID range\n    priority: clientName.toLowerCase().includes('vip') ? 'high' : 'normal',\n    estimatedProcessingTime: Math.ceil(Math.random() * 60) + 30 // 30-90 seconds estimate\n  };\n});\n\n// Update configuration\nconst updatedConfig = {\n  ...config,\n  totalFiles: files.length,\n  discoveredFiles: processedFiles,\n  stage: 'batch_creation',\n  discoveryCompletedAt: new Date().toISOString()\n};\n\nconsole.log(`📁 File Discovery Complete`);\nconsole.log(`   Files Found: ${files.length}`);\nconsole.log(`   Processing Mode: ${config.bmadMode}`);\nconsole.log(`   Batch Size: ${config.batchSize}`);\n\nreturn [{\n  json: updatedConfig\n}];"
+      }
+    },
+    {
+      "id": "batch-creator",
+      "name": "Create Processing Batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 250],
+      "parameters": {
+        "functionCode": "// Create optimized processing batches\nconst config = $input.first().json;\nconst files = config.discoveredFiles;\n\nif (!files || files.length === 0) {\n  throw new Error('No files to process');\n}\n\n// Sort files by priority and estimated processing time\nconst sortedFiles = [...files].sort((a, b) => {\n  // High priority first\n  if (a.priority !== b.priority) {\n    return a.priority === 'high' ? -1 : 1;\n  }\n  // Then by processing time (shorter first for better throughput)\n  return a.estimatedProcessingTime - b.estimatedProcessingTime;\n});\n\n// Create batches\nconst batchSize = config.batchSize;\nconst batches = [];\n\nfor (let i = 0; i < sortedFiles.length; i += batchSize) {\n  const batchFiles = sortedFiles.slice(i, i + batchSize);\n  \n  const batch = {\n    batchId: Math.floor(i / batchSize) + 1,\n    totalBatches: Math.ceil(sortedFiles.length / batchSize),\n    files: batchFiles,\n    batchSize: batchFiles.length,\n    priority: batchFiles.some(f => f.priority === 'high') ? 'high' : 'normal',\n    estimatedDuration: Math.max(...batchFiles.map(f => f.estimatedProcessingTime)),\n    sessionId: config.sessionId,\n    processingMode: config.bmadMode,\n    createdAt: new Date().toISOString()\n  };\n  \n  batches.push(batch);\n}\n\nconsole.log(`📦 Batch Creation Complete`);\nconsole.log(`   Total Batches: ${batches.length}`);\nconsole.log(`   Files per Batch: ${batchSize}`);\nconsole.log(`   High Priority Batches: ${batches.filter(b => b.priority === 'high').length}`);\n\n// Return all batches for parallel processing\nreturn batches.map(batch => ({ json: batch }));"
+      }
+    },
+    {
+      "id": "batch-processor",
+      "name": "Process Batch - Parallel",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1220, 250],
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "continueOnFail": true,
+          "resetInputData": false
+        }
+      }
+    },
+    {
+      "id": "file-iterator",
+      "name": "Process Each File in Batch",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1440, 250],
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "continueOnFail": true,
+          "resetInputData": false
+        }
+      }
+    },
+    {
+      "id": "file-reader",
+      "name": "Read Transcript Content",
+      "type": "n8n-nodes-base.readFile",
+      "typeVersion": 1,
+      "position": [1660, 250],
+      "parameters": {
+        "filePath": "={{ $json.files ? $json.files[0]?.filePath : $json.filePath }}",
+        "dataPropertyName": "transcriptContent"
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "id": "bmad-estate-analyst",
+      "name": "BMAD Estate Planning Analyst",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1880, 250],
+      "parameters": {
+        "functionCode": "// BMAD Estate Planning Analyst - Enhanced Processing\nconst inputData = $input.first().json;\nconst content = inputData.transcriptContent;\nconst fileInfo = inputData.files ? inputData.files[0] : inputData;\n\nif (!content) {\n  throw new Error(`No transcript content found for ${fileInfo.fileName}`);\n}\n\n// Enhanced estate planning analysis prompt\nconst analysisPrompt = `\nYou are a Senior Estate Planning Attorney with 25+ years of experience specializing in high-net-worth clients. You have deep expertise in complex family structures, business succession planning, and advanced tax strategies.\n\nIMPORTANT ANALYSIS FRAMEWORKS:\n\n🏗️ FAMILY STRUCTURE COMPLEXITY:\n- Simple: Traditional nuclear family, clear beneficiaries\n- Moderate: Divorce/remarriage, minor children, basic business interests  \n- Complex: Blended families, special needs beneficiaries, family conflicts\n- Advanced: Multi-generational planning, international assets, multiple entities\n\n💼 BUSINESS SUCCESSION READINESS:\n- Evaluate: Entity structure, ownership clarity, succession timeline\n- Assess: Key person risk, valuation needs, tax implications\n- Identify: Buy-sell agreements, leadership transition, family vs external sale\n\n💰 ESTATE TAX EXPOSURE (2024 rules):\n- Federal exemption: $13.61M per person\n- Calculate potential tax liability and planning urgency\n- Consider: Annual gifting, charitable strategies, trust planning\n\nCLASSIFY MEETING OUTCOME WITH PRECISION:\n\n✅ CLOSED WON - Client committed (explicit verbal commitment, signed agreement, payment made)\n❌ CLOSED LOST - Client declined (explicit rejection, chose competitor, can't afford)\n📞 FOLLOW UP - Most common (need to think about it, requested more info, timing concerns)\n🚫 NO SHOW - Meeting logistics (didn't attend, cancelled same day, technical issues)\n\nURGENCY SCORING (1-10 scale):\n1-2: No immediate need, planning for future\n3-4: Moderate interest, no pressing timeline  \n5-6: Some urgency drivers, planning within 1-2 years\n7-8: Multiple urgency factors, need to act within 6-12 months\n9-10: Critical situations requiring immediate attention\n\nClient: ${fileInfo.clientName}\nFile: ${fileInfo.fileName}\nTranscript Content:\n${content}\n\nExtract comprehensive estate planning data in JSON format:\n\n{\n  \"client_info\": {\n    \"name\": \"${fileInfo.clientName}\",\n    \"age\": null,\n    \"state_of_residence\": null,\n    \"marital_status\": null,\n    \"spouse_name\": null,\n    \"phone\": null,\n    \"email\": null,\n    \"occupation\": null\n  },\n  \"meeting_details\": {\n    \"stage\": \"Follow Up|Closed Won|Closed Lost|No Show\",\n    \"objection\": null,\n    \"reason\": null,\n    \"demo_requested\": \"Yes|No\",\n    \"decision_timeline\": null,\n    \"next_contact_date\": null\n  },\n  \"estate_details\": {\n    \"estate_value\": null,\n    \"payment_amount\": null,\n    \"deposit_amount\": null,\n    \"estate_complexity\": \"Simple|Moderate|Complex|Advanced\",\n    \"tax_exposure_level\": \"None|Low|Moderate|High|Critical\",\n    \"liquidity_concerns\": false\n  },\n  \"beneficiaries\": {\n    \"number_of_beneficiaries\": 0,\n    \"primary_beneficiaries\": [],\n    \"contingent_beneficiaries\": [],\n    \"has_minor_children\": false,\n    \"special_needs_beneficiaries\": false,\n    \"charity_included\": false,\n    \"charity_names\": []\n  },\n  \"assets\": {\n    \"real_estate\": {\n      \"has_real_estate\": false,\n      \"property_count\": 0,\n      \"primary_residence_state\": null,\n      \"other_properties\": [],\n      \"total_real_estate_value\": null\n    },\n    \"business_interests\": {\n      \"owns_business\": false,\n      \"entity_types\": [],\n      \"business_values\": [],\n      \"succession_needed\": false,\n      \"partner_relationships\": []\n    },\n    \"financial_assets\": {\n      \"retirement_accounts\": null,\n      \"investment_accounts\": null,\n      \"life_insurance\": null,\n      \"life_insurance_amount\": null,\n      \"bank_accounts\": null\n    },\n    \"personal_property\": {\n      \"vehicles\": null,\n      \"collections\": null,\n      \"other_valuable_assets\": []\n    }\n  },\n  \"planning_needs\": {\n    \"needs_will\": \"Yes|No|Has Current\",\n    \"needs_trust\": \"Yes|No|Has Current\",\n    \"trust_types_needed\": [],\n    \"needs_poa\": \"Yes|No|Has Current\",\n    \"needs_healthcare_directive\": \"Yes|No|Has Current\",\n    \"entity_formation_interest\": false,\n    \"entity_type_preferred\": null,\n    \"tax_planning_needed\": false,\n    \"charitable_planning_interest\": false\n  },\n  \"family_dynamics\": {\n    \"children_count\": 0,\n    \"children_ages\": [],\n    \"blended_family\": false,\n    \"family_conflicts\": null,\n    \"special_circumstances\": null,\n    \"guardianship_concerns\": false\n  },\n  \"urgency_assessment\": {\n    \"urgency_score\": 5,\n    \"urgency_drivers\": [],\n    \"timeline_factors\": null,\n    \"health_concerns\": false,\n    \"business_timeline\": null\n  },\n  \"advisor_intelligence\": {\n    \"existing_advisors\": [],\n    \"advisor_satisfaction\": null,\n    \"previous_planning_experience\": null,\n    \"referral_source\": null,\n    \"competitor_mentions\": []\n  },\n  \"communication_preferences\": {\n    \"preferred_contact_method\": null,\n    \"best_contact_times\": null,\n    \"decision_making_style\": null,\n    \"information_processing_preference\": null\n  },\n  \"key_insights\": {\n    \"main_concerns\": [],\n    \"motivating_factors\": [],\n    \"potential_objections\": [],\n    \"opportunity_areas\": [],\n    \"risk_factors\": []\n  },\n  \"follow_up_strategy\": {\n    \"recommended_timeline\": null,\n    \"key_messages\": [],\n    \"resources_to_provide\": [],\n    \"meeting_format_preference\": null\n  },\n  \"quality_indicators\": {\n    \"transcript_clarity\": \"High|Medium|Low\",\n    \"information_completeness\": \"High|Medium|Low\",\n    \"extraction_confidence\": \"High|Medium|Low\",\n    \"requires_human_review\": false\n  }\n}\n\nBe thorough and extract as much information as possible. Use null for missing information rather than omitting fields.\n`;\n\nreturn [{\n  json: {\n    ...inputData,\n    analysisPrompt,\n    clientName: fileInfo.clientName,\n    fileName: fileInfo.fileName,\n    dealId: fileInfo.dealId,\n    status: 'ready_for_llm_analysis',\n    bmadStage: 'estate_analyst_complete',\n    processedAt: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "llm-analysis",
+      "name": "LLM Analysis - GPT-4",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [2100, 250],
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a Senior Estate Planning Attorney and Data Analyst. Extract comprehensive structured data from estate planning transcripts with precision and attention to detail. Always respond with valid JSON containing ALL requested fields. Use null for missing information rather than omitting fields. Focus on identifying estate planning opportunities, family dynamics, and business succession needs."
+          },
+          {
+            "role": "user",
+            "content": "={{ $json.analysisPrompt }}"
+          }
+        ],
+        "temperature": 0.1,
+        "maxTokens": 4000,
+        "options": {}
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "id": "document-validator",
+      "name": "BMAD Document Validator",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2320, 250],
+      "parameters": {
+        "functionCode": "// BMAD Document Validator - Quality Assurance\nconst originalData = $input.first().json;\nconst llmResponse = originalData.message?.content || originalData.text || '';\n\n// Parse LLM response\nlet extractedData;\ntry {\n  const jsonMatch = llmResponse.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) {\n    throw new Error('No JSON found in LLM response');\n  }\n  extractedData = JSON.parse(jsonMatch[0]);\n} catch (error) {\n  return [{\n    json: {\n      ...originalData,\n      validationStatus: 'failed',\n      validationError: error.message,\n      qualityScore: 0,\n      requiresHumanReview: true,\n      bmadStage: 'validation_failed'\n    }\n  }];\n}\n\n// BMAD Validation Framework\nconst validation = {\n  completeness: 0,\n  accuracy: 0,\n  consistency: 0,\n  quality: 0\n};\n\nconst issues = [];\nconst suggestions = [];\n\n// 1. COMPLETENESS CHECK (40% of score)\nconst criticalFields = [\n  'client_info.name',\n  'meeting_details.stage',\n  'estate_details.estate_complexity',\n  'urgency_assessment.urgency_score'\n];\n\nconst importantFields = [\n  'client_info.state_of_residence',\n  'client_info.marital_status',\n  'estate_details.estate_value',\n  'beneficiaries.number_of_beneficiaries',\n  'planning_needs.needs_will',\n  'planning_needs.needs_trust'\n];\n\nlet criticalComplete = 0;\nlet importantComplete = 0;\n\ncriticalFields.forEach(field => {\n  const value = field.split('.').reduce((obj, key) => obj?.[key], extractedData);\n  if (value !== null && value !== undefined && value !== '') {\n    criticalComplete++;\n  } else {\n    issues.push(`Missing critical field: ${field}`);\n  }\n});\n\nimportantFields.forEach(field => {\n  const value = field.split('.').reduce((obj, key) => obj?.[key], extractedData);\n  if (value !== null && value !== undefined && value !== '') {\n    importantComplete++;\n  } else {\n    suggestions.push(`Consider gathering: ${field}`);\n  }\n});\n\nvalidation.completeness = (\n  (criticalComplete / criticalFields.length) * 0.7 +\n  (importantComplete / importantFields.length) * 0.3\n) * 100;\n\n// 2. ACCURACY VALIDATION (25% of score)\nlet accuracyPoints = 100;\n\n// Validate stage classification\nconst validStages = ['Follow Up', 'Closed Won', 'Closed Lost', 'No Show'];\nif (!validStages.includes(extractedData.meeting_details?.stage)) {\n  accuracyPoints -= 20;\n  issues.push('Invalid meeting stage classification');\n}\n\n// Validate urgency score\nconst urgencyScore = extractedData.urgency_assessment?.urgency_score;\nif (!urgencyScore || urgencyScore < 1 || urgencyScore > 10) {\n  accuracyPoints -= 15;\n  issues.push('Invalid urgency score (must be 1-10)');\n}\n\n// Validate estate complexity\nconst validComplexity = ['Simple', 'Moderate', 'Complex', 'Advanced'];\nif (!validComplexity.includes(extractedData.estate_details?.estate_complexity)) {\n  accuracyPoints -= 10;\n  issues.push('Invalid estate complexity classification');\n}\n\n// Validate beneficiary logic\nconst beneficiaryCount = extractedData.beneficiaries?.number_of_beneficiaries || 0;\nconst primaryBeneficiaries = extractedData.beneficiaries?.primary_beneficiaries?.length || 0;\nif (beneficiaryCount > 0 && primaryBeneficiaries === 0) {\n  accuracyPoints -= 10;\n  issues.push('Beneficiary count mismatch with primary beneficiaries list');\n}\n\nvalidation.accuracy = Math.max(0, accuracyPoints);\n\n// 3. CONSISTENCY CHECK (20% of score)\nlet consistencyPoints = 100;\n\n// Marital status vs spouse name consistency\nconst maritalStatus = extractedData.client_info?.marital_status;\nconst spouseName = extractedData.client_info?.spouse_name;\nif (maritalStatus === 'Married' && (!spouseName || spouseName.trim() === '')) {\n  consistencyPoints -= 15;\n  suggestions.push('Married clients should have spouse name if mentioned');\n}\nif (maritalStatus !== 'Married' && spouseName && spouseName.trim() !== '') {\n  consistencyPoints -= 15;\n  issues.push('Non-married client has spouse name - check marital status');\n}\n\n// Business ownership vs entity types consistency\nconst ownsBusiness = extractedData.assets?.business_interests?.owns_business;\nconst entityTypes = extractedData.assets?.business_interests?.entity_types?.length || 0;\nif (ownsBusiness && entityTypes === 0) {\n  consistencyPoints -= 10;\n  suggestions.push('Business owner should have entity types specified');\n}\n\n// Minor children vs guardianship concerns\nconst hasMinorChildren = extractedData.beneficiaries?.has_minor_children;\nconst guardianshipConcerns = extractedData.family_dynamics?.guardianship_concerns;\nif (hasMinorChildren && !guardianshipConcerns) {\n  suggestions.push('Minor children present - consider guardianship planning');\n}\n\nvalidation.consistency = Math.max(0, consistencyPoints);\n\n// 4. OVERALL QUALITY ASSESSMENT (15% of score)\nlet qualityPoints = 100;\n\n// Check for meaningful insights\nconst keyInsights = extractedData.key_insights?.main_concerns?.length || 0;\nif (keyInsights === 0) {\n  qualityPoints -= 30;\n  suggestions.push('No key concerns identified - review transcript for insights');\n}\n\n// Check follow-up strategy\nconst followUpMessages = extractedData.follow_up_strategy?.key_messages?.length || 0;\nif (followUpMessages === 0) {\n  qualityPoints -= 20;\n  suggestions.push('No follow-up strategy developed');\n}\n\nvalidation.quality = Math.max(0, qualityPoints);\n\n// Calculate overall score\nconst overallScore = (\n  validation.completeness * 0.40 +\n  validation.accuracy * 0.25 +\n  validation.consistency * 0.20 +\n  validation.quality * 0.15\n);\n\n// Determine quality level and next steps\nlet qualityLevel, requiresReview;\nif (overallScore >= 90) {\n  qualityLevel = 'Excellent';\n  requiresReview = false;\n} else if (overallScore >= 75) {\n  qualityLevel = 'Good';\n  requiresReview = false;\n} else if (overallScore >= 60) {\n  qualityLevel = 'Acceptable';\n  requiresReview = true;\n} else {\n  qualityLevel = 'Poor';\n  requiresReview = true;\n}\n\n// Enhanced data with validation results\nconst validatedData = {\n  ...originalData,\n  extractedData,\n  validation: {\n    overallScore: Math.round(overallScore),\n    qualityLevel,\n    requiresReview,\n    scores: validation,\n    issues,\n    suggestions,\n    validatedAt: new Date().toISOString(),\n    validator: 'BMAD Document Validator v1.0'\n  },\n  bmadStage: 'validation_complete',\n  validationStatus: 'passed'\n};\n\nconsole.log(`📋 Validation Complete: ${originalData.clientName}`);\nconsole.log(`   Quality Score: ${Math.round(overallScore)}% (${qualityLevel})`);\nconsole.log(`   Issues: ${issues.length}`);\nconsole.log(`   Requires Review: ${requiresReview}`);\n\nreturn [{ json: validatedData }];"
+      }
+    },
+    {
+      "id": "data-structurer",
+      "name": "Structure for Baserow",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2540, 250],
+      "parameters": {
+        "functionCode": "// Structure data for Baserow CRM\nconst inputData = $input.first().json;\nconst extracted = inputData.extractedData;\nconst validation = inputData.validation;\n\nif (!extracted) {\n  throw new Error('No extracted data available for structuring');\n}\n\n// Build comprehensive Baserow record\nconst baserowRecord = {\n  // Core CRM Fields\n  field_6755: extracted.client_info?.name || inputData.clientName || 'Unknown',\n  field_6756: extracted.meeting_details?.stage || 'Follow Up',\n  field_6764: extracted.urgency_assessment?.urgency_score || 5,\n  field_6765: extracted.meeting_details?.stage !== 'Closed Won',\n  \n  // Enhanced Estate Planning Fields\n  deal_id: inputData.dealId || Math.floor(Math.random() * 10000),\n  client_age: extracted.client_info?.age,\n  state_of_residence: extracted.client_info?.state_of_residence,\n  marital_status: extracted.client_info?.marital_status,\n  spouse_name: extracted.client_info?.spouse_name,\n  occupation: extracted.client_info?.occupation,\n  phone: extracted.client_info?.phone,\n  email: extracted.client_info?.email,\n  \n  // Estate Information\n  estate_value: extracted.estate_details?.estate_value,\n  estate_complexity: extracted.estate_details?.estate_complexity,\n  tax_exposure_level: extracted.estate_details?.tax_exposure_level,\n  payment_amount: extracted.estate_details?.payment_amount,\n  deposit_amount: extracted.estate_details?.deposit_amount,\n  liquidity_concerns: extracted.estate_details?.liquidity_concerns || false,\n  \n  // Beneficiary Information\n  number_of_beneficiaries: extracted.beneficiaries?.number_of_beneficiaries || 0,\n  primary_beneficiaries: (extracted.beneficiaries?.primary_beneficiaries || []).join(', '),\n  contingent_beneficiaries: (extracted.beneficiaries?.contingent_beneficiaries || []).join(', '),\n  has_minor_children: extracted.beneficiaries?.has_minor_children || false,\n  special_needs_beneficiaries: extracted.beneficiaries?.special_needs_beneficiaries || false,\n  charity_included: extracted.beneficiaries?.charity_included || false,\n  charity_names: (extracted.beneficiaries?.charity_names || []).join(', '),\n  \n  // Assets\n  has_real_estate: extracted.assets?.real_estate?.has_real_estate || false,\n  property_count: extracted.assets?.real_estate?.property_count || 0,\n  other_properties: (extracted.assets?.real_estate?.other_properties || []).join(', '),\n  owns_business: extracted.assets?.business_interests?.owns_business || false,\n  entity_types: (extracted.assets?.business_interests?.entity_types || []).join(', '),\n  succession_needed: extracted.assets?.business_interests?.succession_needed || false,\n  retirement_accounts: extracted.assets?.financial_assets?.retirement_accounts,\n  life_insurance: extracted.assets?.financial_assets?.life_insurance,\n  life_insurance_amount: extracted.assets?.financial_assets?.life_insurance_amount,\n  \n  // Planning Needs\n  needs_will: extracted.planning_needs?.needs_will,\n  needs_trust: extracted.planning_needs?.needs_trust,\n  trust_types_needed: (extracted.planning_needs?.trust_types_needed || []).join(', '),\n  needs_poa: extracted.planning_needs?.needs_poa,\n  needs_healthcare_directive: extracted.planning_needs?.needs_healthcare_directive,\n  entity_formation_interest: extracted.planning_needs?.entity_formation_interest || false,\n  entity_type_preferred: extracted.planning_needs?.entity_type_preferred,\n  tax_planning_needed: extracted.planning_needs?.tax_planning_needed || false,\n  charitable_planning_interest: extracted.planning_needs?.charitable_planning_interest || false,\n  \n  // Family Dynamics\n  children_count: extracted.family_dynamics?.children_count || 0,\n  children_ages: (extracted.family_dynamics?.children_ages || []).join(', '),\n  blended_family: extracted.family_dynamics?.blended_family || false,\n  family_conflicts: extracted.family_dynamics?.family_conflicts,\n  guardianship_concerns: extracted.family_dynamics?.guardianship_concerns || false,\n  \n  // Advisor Intelligence\n  existing_advisors: (extracted.advisor_intelligence?.existing_advisors || []).join(', '),\n  referral_source: extracted.advisor_intelligence?.referral_source,\n  competitor_mentions: (extracted.advisor_intelligence?.competitor_mentions || []).join(', '),\n  \n  // Communication & Follow-up\n  preferred_contact_method: extracted.communication_preferences?.preferred_contact_method,\n  decision_making_style: extracted.communication_preferences?.decision_making_style,\n  recommended_timeline: extracted.follow_up_strategy?.recommended_timeline,\n  next_contact_date: extracted.meeting_details?.next_contact_date,\n  \n  // Key Insights\n  main_concerns: (extracted.key_insights?.main_concerns || []).join('; '),\n  motivating_factors: (extracted.key_insights?.motivating_factors || []).join('; '),\n  opportunity_areas: (extracted.key_insights?.opportunity_areas || []).join('; '),\n  risk_factors: (extracted.key_insights?.risk_factors || []).join('; '),\n  \n  // Quality & Processing Metadata\n  quality_score: validation?.overallScore || 0,\n  quality_level: validation?.qualityLevel || 'Unknown',\n  requires_review: validation?.requiresReview || false,\n  extraction_confidence: extracted.quality_indicators?.extraction_confidence,\n  transcript_clarity: extracted.quality_indicators?.transcript_clarity,\n  \n  // Processing Information\n  source_file: inputData.fileName,\n  session_id: inputData.sessionId,\n  processed_at: new Date().toISOString(),\n  bmad_version: '3.0.0',\n  \n  // Comprehensive Notes\n  notes: `BMAD ESTATE PLANNING ANALYSIS\\n\\n` +\n         `📊 QUALITY SCORE: ${validation?.overallScore || 0}% (${validation?.qualityLevel || 'Unknown'})\\n\\n` +\n         `👤 CLIENT PROFILE:\\n` +\n         `• Name: ${extracted.client_info?.name || 'Unknown'}\\n` +\n         `• Age: ${extracted.client_info?.age || 'Not specified'}\\n` +\n         `• State: ${extracted.client_info?.state_of_residence || 'Not specified'}\\n` +\n         `• Marital Status: ${extracted.client_info?.marital_status || 'Not specified'}\\n` +\n         `• Occupation: ${extracted.client_info?.occupation || 'Not specified'}\\n\\n` +\n         \n         `💰 ESTATE OVERVIEW:\\n` +\n         `• Total Value: ${extracted.estate_details?.estate_value || 'Not disclosed'}\\n` +\n         `• Complexity: ${extracted.estate_details?.estate_complexity || 'Not assessed'}\\n` +\n         `• Tax Exposure: ${extracted.estate_details?.tax_exposure_level || 'Unknown'}\\n` +\n         `• Liquidity Concerns: ${extracted.estate_details?.liquidity_concerns ? 'Yes' : 'No'}\\n\\n` +\n         \n         `👨‍👩‍👧‍👦 BENEFICIARIES (${extracted.beneficiaries?.number_of_beneficiaries || 0} total):\\n` +\n         `• Primary: ${(extracted.beneficiaries?.primary_beneficiaries || []).join(', ') || 'Not specified'}\\n` +\n         `• Minor Children: ${extracted.beneficiaries?.has_minor_children ? 'Yes' : 'No'}\\n` +\n         `• Special Needs: ${extracted.beneficiaries?.special_needs_beneficiaries ? 'Yes' : 'No'}\\n` +\n         `• Charity Included: ${extracted.beneficiaries?.charity_included ? 'Yes' : 'No'}\\n\\n` +\n         \n         `🏠 ASSETS:\\n` +\n         `• Real Estate: ${extracted.assets?.real_estate?.has_real_estate ? 'Yes' : 'No'} (${extracted.assets?.real_estate?.property_count || 0} properties)\\n` +\n         `• Business Interests: ${extracted.assets?.business_interests?.owns_business ? 'Yes' : 'No'}\\n` +\n         `• Entity Types: ${(extracted.assets?.business_interests?.entity_types || []).join(', ') || 'None'}\\n` +\n         `• Retirement Accounts: ${extracted.assets?.financial_assets?.retirement_accounts || 'Not mentioned'}\\n` +\n         `• Life Insurance: ${extracted.assets?.financial_assets?.life_insurance || 'Not mentioned'}\\n\\n` +\n         \n         `📋 PLANNING NEEDS:\\n` +\n         `• Will: ${extracted.planning_needs?.needs_will || 'Unknown'}\\n` +\n         `• Trust: ${extracted.planning_needs?.needs_trust || 'Unknown'}\\n` +\n         `• Power of Attorney: ${extracted.planning_needs?.needs_poa || 'Unknown'}\\n` +\n         `• Healthcare Directive: ${extracted.planning_needs?.needs_healthcare_directive || 'Unknown'}\\n` +\n         `• Entity Formation: ${extracted.planning_needs?.entity_formation_interest ? 'Interested' : 'Not mentioned'}\\n` +\n         `• Tax Planning: ${extracted.planning_needs?.tax_planning_needed ? 'Needed' : 'Not discussed'}\\n\\n` +\n         \n         `🎯 KEY INSIGHTS:\\n` +\n         `• Main Concerns: ${(extracted.key_insights?.main_concerns || []).join('; ') || 'None identified'}\\n` +\n         `• Motivating Factors: ${(extracted.key_insights?.motivating_factors || []).join('; ') || 'None identified'}\\n` +\n         `• Risk Factors: ${(extracted.key_insights?.risk_factors || []).join('; ') || 'None identified'}\\n\\n` +\n         \n         `📞 FOLLOW-UP STRATEGY:\\n` +\n         `• Recommended Timeline: ${extracted.follow_up_strategy?.recommended_timeline || 'Standard follow-up'}\\n` +\n         `• Key Messages: ${(extracted.follow_up_strategy?.key_messages || []).join('; ') || 'Standard value proposition'}\\n\\n` +\n         \n         `⚠️ VALIDATION RESULTS:\\n` +\n         `• Issues: ${(validation?.issues || []).join('; ') || 'None'}\\n` +\n         `• Suggestions: ${(validation?.suggestions || []).join('; ') || 'None'}\\n\\n` +\n         \n         `📁 PROCESSING INFO:\\n` +\n         `• Source: ${inputData.fileName}\\n` +\n         `• Session: ${inputData.sessionId}\\n` +\n         `• Processed: ${new Date().toISOString()}\\n` +\n         `• BMAD Version: 3.0.0`\n};\n\n// Store full extracted data as metadata\nbaserowRecord._fullExtractedData = extracted;\nbaserowRecord._validationResults = validation;\n\nconsole.log(`📊 Data Structured for CRM: ${baserowRecord.field_6755}`);\nconsole.log(`   Quality Score: ${baserowRecord.quality_score}%`);\nconsole.log(`   Planning Complexity: ${baserowRecord.estate_complexity}`);\n\nreturn [{ json: baserowRecord }];"
+      }
+    },
+    {
+      "id": "route-quality",
+      "name": "Route by Quality Score",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [2760, 250],
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "value1": 75,
+              "operation": "largerEqual"
+            },
+            {
+              "value1": 60,
+              "operation": "largerEqual"
+            }
+          ]
+        },
+        "dataType": "number",
+        "value1": "={{ $json.quality_score }}"
+      }
+    },
+    {
+      "id": "save-to-baserow",
+      "name": "Save to Baserow CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2980, 150],
+      "parameters": {
+        "url": "http://localhost/api/database/rows/table/698/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "field_6755",
+              "value": "={{ $json.field_6755 }}"
+            },
+            {
+              "name": "field_6756",
+              "value": "={{ $json.field_6756 }}"
+            },
+            {
+              "name": "field_6764",
+              "value": "={{ $json.field_6764 }}"
+            },
+            {
+              "name": "field_6765",
+              "value": "={{ $json.field_6765 }}"
+            }
+          ]
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "id": "quality-review-queue",
+      "name": "Queue for Review",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2980, 250],
+      "parameters": {
+        "functionCode": "// Queue low-quality extractions for human review\nconst data = $input.first().json;\n\nconst reviewItem = {\n  client_name: data.field_6755,\n  quality_score: data.quality_score,\n  issues: data._validationResults?.issues || [],\n  suggestions: data._validationResults?.suggestions || [],\n  source_file: data.source_file,\n  queued_at: new Date().toISOString(),\n  review_priority: data.quality_score < 50 ? 'high' : 'medium',\n  requires_callback: data.field_6756 === 'Follow Up',\n  session_id: data.session_id\n};\n\nconsole.log(`⚠️ Queued for Review: ${data.field_6755}`);\nconsole.log(`   Quality Score: ${data.quality_score}%`);\nconsole.log(`   Issues: ${reviewItem.issues.length}`);\n\nreturn [{ json: reviewItem }];"
+      }
+    },
+    {
+      "id": "failed-processing-handler",
+      "name": "Handle Processing Failures",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2980, 350],
+      "parameters": {
+        "functionCode": "// Handle critical processing failures\nconst data = $input.first().json;\n\nconst failureRecord = {\n  client_name: data.field_6755 || 'Unknown',\n  quality_score: data.quality_score || 0,\n  failure_reason: 'Critical quality threshold not met',\n  requires_manual_processing: true,\n  source_file: data.source_file,\n  failed_at: new Date().toISOString(),\n  priority: 'high',\n  session_id: data.session_id,\n  raw_data: data._fullExtractedData\n};\n\nconsole.log(`❌ Processing Failed: ${data.field_6755}`);\nconsole.log(`   Quality Score: ${data.quality_score}%`);\nconsole.log(`   Requires Manual Processing`);\n\nreturn [{ json: failureRecord }];"
+      }
+    },
+    {
+      "id": "email-orchestrator",
+      "name": "BMAD Email Orchestrator",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3200, 150],
+      "parameters": {
+        "functionCode": "// BMAD Email Orchestrator - Personalized Follow-up Generation\nconst crmData = $input.first().json;\nconst extracted = crmData._fullExtractedData;\n\nif (!extracted || !extracted.meeting_details) {\n  return [{\n    json: {\n      ...crmData,\n      emailGenerated: false,\n      emailReason: 'Insufficient data for email generation'\n    }\n  }];\n}\n\nconst stage = extracted.meeting_details.stage;\nconst clientName = extracted.client_info?.name || crmData.field_6755;\nconst firstName = clientName.split(' ')[0];\n\n// Determine email strategy based on meeting stage\nlet emailConfig = {};\n\nswitch (stage) {\n  case 'Closed Won':\n    emailConfig = {\n      subject: `Welcome to [Firm Name], ${firstName}! Your Estate Planning Journey Begins`,\n      tone: 'congratulatory',\n      urgency: 'immediate',\n      cta: 'schedule_onboarding',\n      timing: 'within_24_hours'\n    };\n    break;\n    \n  case 'Follow Up':\n    const urgencyScore = extracted.urgency_assessment?.urgency_score || 5;\n    const mainConcerns = extracted.key_insights?.main_concerns || [];\n    \n    emailConfig = {\n      subject: urgencyScore >= 7 \n        ? `${firstName}, Time-Sensitive Estate Planning Considerations`\n        : `Following Up on Your Estate Planning Discussion, ${firstName}`,\n      tone: urgencyScore >= 7 ? 'urgent_but_helpful' : 'consultative',\n      urgency: urgencyScore >= 7 ? 'high' : 'medium',\n      cta: 'schedule_follow_up',\n      timing: urgencyScore >= 8 ? 'within_48_hours' : 'within_1_week',\n      personalization: {\n        concerns: mainConcerns,\n        family_situation: {\n          spouse: extracted.client_info?.spouse_name,\n          children_count: extracted.family_dynamics?.children_count,\n          minor_children: extracted.beneficiaries?.has_minor_children\n        },\n        assets: {\n          business: extracted.assets?.business_interests?.owns_business,\n          real_estate: extracted.assets?.real_estate?.has_real_estate,\n          estate_value: extracted.estate_details?.estate_value\n        }\n      }\n    };\n    break;\n    \n  case 'Closed Lost':\n    emailConfig = {\n      subject: `Thank You, ${firstName} - We're Here When You're Ready`,\n      tone: 'gracious',\n      urgency: 'low',\n      cta: 'stay_connected',\n      timing: 'immediate'\n    };\n    break;\n    \n  case 'No Show':\n    emailConfig = {\n      subject: `${firstName}, We Missed You - Let's Reschedule`,\n      tone: 'understanding',\n      urgency: 'medium',\n      cta: 'reschedule',\n      timing: 'within_24_hours'\n    };\n    break;\n    \n  default:\n    emailConfig = {\n      subject: `Following Up on Your Estate Planning Inquiry, ${firstName}`,\n      tone: 'professional',\n      urgency: 'medium',\n      cta: 'general_follow_up',\n      timing: 'within_1_week'\n    };\n}\n\n// Generate personalized email content\nlet emailBody = '';\n\nif (stage === 'Closed Won') {\n  emailBody = `Dear ${firstName},\\n\\n` +\n              `Congratulations on taking this important step to protect your family's future! We're honored that you've chosen [Firm Name] for your estate planning needs.\\n\\n` +\n              `Based on our discussion, we understand your priorities include:\\n`;\n  \n  if (extracted.key_insights?.main_concerns?.length > 0) {\n    emailBody += extracted.key_insights.main_concerns.map(concern => `• ${concern}`).join('\\n') + '\\n\\n';\n  }\n  \n  emailBody += `Next Steps:\\n` +\n               `1. Review and sign the engagement letter (attached)\\n` +\n               `2. Complete the client questionnaire\\n` +\n               `3. Gather requested documents\\n` +\n               `4. Schedule your planning session\\n\\n` +\n               `We'll be in touch within 24 hours to coordinate your onboarding process.\\n\\n` +\n               `Welcome to the [Firm Name] family!`;\n               \n} else if (stage === 'Follow Up') {\n  emailBody = `Dear ${firstName},\\n\\n` +\n              `Thank you for taking the time to discuss your estate planning needs with us. `;\n  \n  // Personalize based on family situation\n  if (extracted.client_info?.spouse_name) {\n    emailBody += `It was wonderful to learn about your family, including ${extracted.client_info.spouse_name}`;\n    if (extracted.family_dynamics?.children_count > 0) {\n      emailBody += ` and your ${extracted.family_dynamics.children_count} child${extracted.family_dynamics.children_count > 1 ? 'ren' : ''}`;\n    }\n    emailBody += `. `;\n  }\n  \n  emailBody += `\\n\\nDuring our conversation, you mentioned several important considerations:\\n`;\n  \n  if (extracted.key_insights?.main_concerns?.length > 0) {\n    emailBody += extracted.key_insights.main_concerns.map(concern => `• ${concern}`).join('\\n') + '\\n';\n  }\n  \n  // Add urgency-based content\n  if (extracted.urgency_assessment?.urgency_score >= 7) {\n    emailBody += `\\nGiven the time-sensitive nature of your situation, `;\n    if (extracted.urgency_assessment?.urgency_drivers?.length > 0) {\n      emailBody += `particularly ${extracted.urgency_assessment.urgency_drivers.join(' and ')}, `;\n    }\n    emailBody += `we recommend moving forward with your estate planning within the next few months.\\n`;\n  }\n  \n  // Add value-based content\n  if (extracted.assets?.business_interests?.owns_business) {\n    emailBody += `\\nAs a business owner, protecting both your personal and business assets is crucial for your family's security and your business's continuity.\\n`;\n  }\n  \n  if (extracted.beneficiaries?.has_minor_children) {\n    emailBody += `\\nWith minor children, ensuring proper guardianship arrangements and educational funding protection should be priorities in your planning.\\n`;\n  }\n  \n  emailBody += `\\nI'd love to continue our conversation and help you create a comprehensive plan that addresses your unique needs. Would you be available for a brief call next week to discuss your next steps?\\n\\n` +\n               `Best regards,\\n[Your Name]`;\n               \n} else if (stage === 'Closed Lost') {\n  emailBody = `Dear ${firstName},\\n\\n` +\n              `Thank you for considering [Firm Name] for your estate planning needs. While we understand you've decided to go in a different direction, we respect your decision and wish you the best.\\n\\n` +\n              `Should your circumstances change or if you have any questions about estate planning in the future, please don't hesitate to reach out. We're always here to help.\\n\\n` +\n              `Wishing you and your family all the best,\\n[Your Name]`;\n              \n} else if (stage === 'No Show') {\n  emailBody = `Dear ${firstName},\\n\\n` +\n              `We missed you at our scheduled appointment and hope everything is well. We understand that priorities can shift and schedules can change unexpectedly.\\n\\n` +\n              `If you're still interested in discussing your estate planning needs, I'd be happy to reschedule at a time that works better for you. Simply reply to this email or call our office.\\n\\n` +\n              `No pressure - we're here when you're ready.\\n\\n` +\n              `Best regards,\\n[Your Name]`;\n}\n\n// Calculate optimal send time\nconst now = new Date();\nlet sendTime = new Date();\n\nswitch (emailConfig.timing) {\n  case 'immediate':\n  case 'within_24_hours':\n    // Send within next business day, 9-11am or 2-4pm\n    sendTime.setHours(now.getHours() < 14 ? 10 : 15);\n    break;\n  case 'within_48_hours':\n    sendTime.setDate(now.getDate() + (now.getHours() > 16 ? 2 : 1));\n    sendTime.setHours(10);\n    break;\n  case 'within_1_week':\n    sendTime.setDate(now.getDate() + 3);\n    sendTime.setHours(10);\n    break;\n}\n\nconst emailData = {\n  ...crmData,\n  email: {\n    recipient: {\n      name: clientName,\n      email: extracted.client_info?.email || 'email_needed@placeholder.com',\n      first_name: firstName\n    },\n    subject: emailConfig.subject,\n    body: emailBody,\n    tone: emailConfig.tone,\n    urgency: emailConfig.urgency,\n    cta: emailConfig.cta,\n    optimal_send_time: sendTime.toISOString(),\n    personalization_applied: {\n      family_references: !!extracted.client_info?.spouse_name,\n      concern_addressing: (extracted.key_insights?.main_concerns?.length || 0) > 0,\n      asset_specific: !!extracted.assets?.business_interests?.owns_business,\n      urgency_adjusted: extracted.urgency_assessment?.urgency_score >= 7\n    },\n    generated_at: new Date().toISOString(),\n    generator: 'BMAD Email Orchestrator v1.0'\n  },\n  emailGenerated: true,\n  bmadStage: 'email_orchestrated'\n};\n\nconsole.log(`📧 Email Generated: ${clientName}`);\nconsole.log(`   Stage: ${stage}`);\nconsole.log(`   Tone: ${emailConfig.tone}`);\nconsole.log(`   Send Time: ${emailConfig.timing}`);\n\nreturn [{ json: emailData }];"
+      }
+    },
+    {
+      "id": "knowledge-extractor",
+      "name": "BMAD Knowledge Extractor",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3420, 150],
+      "parameters": {
+        "functionCode": "// BMAD Knowledge Extractor - Advanced Insights\nconst emailData = $input.first().json;\nconst extracted = emailData._fullExtractedData;\nconst clientName = emailData.field_6755;\n\n// Extract competitive intelligence\nconst competitiveIntel = {\n  existing_relationships: {\n    attorneys: [],\n    cpas: [],\n    financial_advisors: [],\n    insurance_agents: []\n  },\n  competitor_mentions: extracted.advisor_intelligence?.competitor_mentions || [],\n  pricing_sensitivity: {\n    budget_conscious: false,\n    price_objections: [],\n    value_focused: false\n  },\n  decision_timeline: {\n    urgency_drivers: extracted.urgency_assessment?.urgency_drivers || [],\n    external_deadlines: [],\n    internal_motivations: []\n  }\n};\n\n// Analyze relationship mapping\nconst relationships = {\n  family_complexity: {\n    level: extracted.estate_details?.estate_complexity || 'Simple',\n    blended_family: extracted.family_dynamics?.blended_family || false,\n    special_needs: extracted.beneficiaries?.special_needs_beneficiaries || false,\n    conflicts: extracted.family_dynamics?.family_conflicts || null\n  },\n  business_network: {\n    entity_count: (extracted.assets?.business_interests?.entity_types || []).length,\n    partnership_complexity: extracted.assets?.business_interests?.partner_relationships?.length || 0,\n    succession_readiness: extracted.assets?.business_interests?.succession_needed || false\n  },\n  professional_network: {\n    existing_advisors: extracted.advisor_intelligence?.existing_advisors || [],\n    satisfaction_level: extracted.advisor_intelligence?.advisor_satisfaction || 'unknown',\n    referral_source: extracted.advisor_intelligence?.referral_source || 'unknown'\n  }\n};\n\n// Hidden opportunity analysis\nconst opportunities = {\n  tax_optimization: {\n    estate_tax_exposure: extracted.estate_details?.tax_exposure_level !== 'None',\n    annual_gifting: false, // Would need deeper analysis\n    charitable_strategies: extracted.planning_needs?.charitable_planning_interest || false,\n    trust_opportunities: extracted.planning_needs?.needs_trust === 'Yes'\n  },\n  succession_planning: {\n    business_continuity: extracted.assets?.business_interests?.succession_needed || false,\n    key_person_insurance: false, // Would need deeper analysis\n    buy_sell_agreements: false // Would need deeper analysis\n  },\n  family_protection: {\n    guardianship_planning: extracted.beneficiaries?.has_minor_children || false,\n    special_needs_trusts: extracted.beneficiaries?.special_needs_beneficiaries || false,\n    asset_protection: extracted.estate_details?.liquidity_concerns || false\n  }\n};\n\n// Risk factor identification\nconst riskFactors = {\n  family_dynamics: {\n    conflicts: !!extracted.family_dynamics?.family_conflicts,\n    blended_complexity: extracted.family_dynamics?.blended_family || false,\n    communication_issues: false // Would need sentiment analysis\n  },\n  business_vulnerabilities: {\n    succession_gaps: extracted.assets?.business_interests?.succession_needed && !extracted.planning_needs?.entity_formation_interest,\n    liquidity_constraints: extracted.estate_details?.liquidity_concerns || false,\n    regulatory_exposure: false // Would need industry analysis\n  },\n  planning_gaps: {\n    outdated_documents: false, // Would need document review\n    inadequate_coverage: false, // Would need coverage analysis\n    tax_inefficiencies: extracted.estate_details?.tax_exposure_level === 'High' || extracted.estate_details?.tax_exposure_level === 'Critical'\n  }\n};\n\n// Generate strategic insights\nconst strategicInsights = {\n  immediate_priorities: [],\n  medium_term_opportunities: [],\n  long_term_strategies: [],\n  potential_challenges: [],\n  competitive_advantages: []\n};\n\n// Populate strategic insights based on analysis\nif (extracted.beneficiaries?.has_minor_children) {\n  strategicInsights.immediate_priorities.push('Guardianship planning for minor children');\n}\n\nif (extracted.estate_details?.tax_exposure_level === 'High' || extracted.estate_details?.tax_exposure_level === 'Critical') {\n  strategicInsights.immediate_priorities.push('Estate tax mitigation strategies');\n}\n\nif (extracted.assets?.business_interests?.owns_business && extracted.assets?.business_interests?.succession_needed) {\n  strategicInsights.medium_term_opportunities.push('Business succession planning implementation');\n}\n\nif (extracted.planning_needs?.charitable_planning_interest) {\n  strategicInsights.long_term_strategies.push('Charitable giving strategy development');\n}\n\nif (extracted.family_dynamics?.family_conflicts) {\n  strategicInsights.potential_challenges.push('Family dynamic management in planning process');\n}\n\n// Calculate sophistication score\nlet sophisticationScore = 0;\nif (extracted.assets?.business_interests?.owns_business) sophisticationScore += 25;\nif ((extracted.assets?.business_interests?.entity_types || []).length > 1) sophisticationScore += 15;\nif (extracted.estate_details?.estate_value && extracted.estate_details.estate_value.includes('M')) sophisticationScore += 20;\nif (extracted.planning_needs?.tax_planning_needed) sophisticationScore += 15;\nif (extracted.assets?.real_estate?.property_count > 1) sophisticationScore += 10;\nif (extracted.planning_needs?.charitable_planning_interest) sophisticationScore += 15;\n\nconst knowledgeProfile = {\n  client_name: clientName,\n  sophistication_score: Math.min(100, sophisticationScore),\n  competitive_intelligence: competitiveIntel,\n  relationship_mapping: relationships,\n  opportunity_analysis: opportunities,\n  risk_assessment: riskFactors,\n  strategic_insights: strategicInsights,\n  engagement_strategy: {\n    complexity_approach: sophisticationScore > 60 ? 'technical' : 'consultative',\n    communication_style: extracted.communication_preferences?.decision_making_style || 'balanced',\n    follow_up_frequency: extracted.urgency_assessment?.urgency_score >= 7 ? 'frequent' : 'standard',\n    resource_level: sophisticationScore > 70 ? 'high-touch' : 'standard'\n  },\n  extracted_at: new Date().toISOString(),\n  extractor_version: 'BMAD Knowledge Extractor v1.0'\n};\n\nconst enhancedData = {\n  ...emailData,\n  knowledge_profile: knowledgeProfile,\n  bmadStage: 'knowledge_extracted'\n};\n\nconsole.log(`🧠 Knowledge Extracted: ${clientName}`);\nconsole.log(`   Sophistication Score: ${sophisticationScore}%`);\nconsole.log(`   Strategic Insights: ${strategicInsights.immediate_priorities.length + strategicInsights.medium_term_opportunities.length}`);\nconsole.log(`   Risk Factors Identified: ${Object.values(riskFactors).reduce((count, category) => count + Object.values(category).filter(v => v === true).length, 0)}`);\n\nreturn [{ json: enhancedData }];"
+      }
+    },
+    {
+      "id": "pipeline-manager",
+      "name": "BMAD Pipeline Manager",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3640, 150],
+      "parameters": {
+        "functionCode": "// BMAD Pipeline Manager - Performance Monitoring & Reporting\nconst finalData = $input.first().json;\nconst sessionId = finalData.session_id;\nconst clientName = finalData.field_6755;\n\n// Update processing metrics\nconst processingMetrics = {\n  client_name: clientName,\n  session_id: sessionId,\n  completed_at: new Date().toISOString(),\n  processing_time: Date.now() - new Date(finalData.processed_at).getTime(),\n  quality_score: finalData.quality_score,\n  bmad_stages_completed: [\n    'estate_analyst',\n    'document_validator',\n    'data_structurer',\n    'email_orchestrator',\n    'knowledge_extractor'\n  ],\n  success: true,\n  errors_encountered: 0,\n  retry_attempts: 0\n};\n\n// Generate processing report\nconst report = {\n  session_summary: {\n    session_id: sessionId,\n    total_processing_time: processingMetrics.processing_time,\n    average_quality_score: finalData.quality_score,\n    successful_extractions: 1,\n    failed_extractions: 0,\n    files_requiring_review: finalData.requires_review ? 1 : 0\n  },\n  client_insights: {\n    name: clientName,\n    complexity_level: finalData.estate_complexity,\n    urgency_score: finalData.field_6764,\n    follow_up_generated: !!finalData.email?.subject,\n    knowledge_profile_created: !!finalData.knowledge_profile\n  },\n  quality_assessment: {\n    overall_score: finalData.quality_score,\n    validation_passed: !finalData.requires_review,\n    issues_count: (finalData._validationResults?.issues || []).length,\n    suggestions_count: (finalData._validationResults?.suggestions || []).length\n  },\n  next_actions: {\n    crm_updated: true,\n    follow_up_email_ready: !!finalData.email,\n    requires_human_review: finalData.requires_review,\n    high_priority_client: finalData.field_6764 >= 8\n  },\n  performance_indicators: {\n    processing_efficiency: processingMetrics.processing_time < 60000 ? 'excellent' : processingMetrics.processing_time < 120000 ? 'good' : 'needs_optimization',\n    data_quality: finalData.quality_score >= 90 ? 'excellent' : finalData.quality_score >= 75 ? 'good' : 'acceptable',\n    automation_success: 'full'\n  },\n  recommendations: []\n};\n\n// Generate recommendations\nif (finalData.quality_score < 75) {\n  report.recommendations.push('Consider transcript quality improvements or additional training data');\n}\n\nif (finalData.field_6764 >= 8) {\n  report.recommendations.push('High urgency client - prioritize immediate follow-up');\n}\n\nif (finalData.estate_complexity === 'Advanced' || finalData.estate_complexity === 'Complex') {\n  report.recommendations.push('Complex estate - consider senior advisor assignment');\n}\n\nif (finalData.knowledge_profile?.sophistication_score > 70) {\n  report.recommendations.push('High sophistication client - technical approach recommended');\n}\n\n// Log comprehensive results\nconsole.log(`🎯 BMAD Processing Complete: ${clientName}`);\nconsole.log(`   Session ID: ${sessionId}`);\nconsole.log(`   Processing Time: ${Math.round(processingMetrics.processing_time / 1000)}s`);\nconsole.log(`   Quality Score: ${finalData.quality_score}%`);\nconsole.log(`   Estate Complexity: ${finalData.estate_complexity}`);\nconsole.log(`   Urgency Score: ${finalData.field_6764}/10`);\nconsole.log(`   Follow-up Email: ${finalData.email ? 'Generated' : 'Not Generated'}`);\nconsole.log(`   Requires Review: ${finalData.requires_review ? 'Yes' : 'No'}`);\n\nreturn [{\n  json: {\n    ...finalData,\n    processing_metrics: processingMetrics,\n    pipeline_report: report,\n    bmad_complete: true,\n    final_status: 'success'\n  }\n}];"
+      }
+    },
+    {
+      "id": "batch-summary",
+      "name": "Generate Batch Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3860, 150],
+      "parameters": {
+        "functionCode": "// Generate comprehensive batch processing summary\nconst allResults = $input.all();\nconst sessionId = allResults[0]?.json?.session_id || 'unknown';\n\nconst summary = {\n  session_id: sessionId,\n  batch_completed_at: new Date().toISOString(),\n  total_files_processed: allResults.length,\n  success_count: allResults.filter(r => r.json.final_status === 'success').length,\n  failure_count: allResults.filter(r => r.json.final_status !== 'success').length,\n  average_quality_score: allResults.reduce((sum, r) => sum + (r.json.quality_score || 0), 0) / allResults.length,\n  high_urgency_clients: allResults.filter(r => r.json.field_6764 >= 8).length,\n  requires_review_count: allResults.filter(r => r.json.requires_review).length,\n  emails_generated: allResults.filter(r => r.json.email?.subject).length,\n  complex_estates: allResults.filter(r => ['Complex', 'Advanced'].includes(r.json.estate_complexity)).length,\n  \n  client_breakdown: {\n    closed_won: allResults.filter(r => r.json.field_6756 === 'Closed Won').length,\n    follow_up: allResults.filter(r => r.json.field_6756 === 'Follow Up').length,\n    closed_lost: allResults.filter(r => r.json.field_6756 === 'Closed Lost').length,\n    no_show: allResults.filter(r => r.json.field_6756 === 'No Show').length\n  },\n  \n  quality_distribution: {\n    excellent: allResults.filter(r => r.json.quality_score >= 90).length,\n    good: allResults.filter(r => r.json.quality_score >= 75 && r.json.quality_score < 90).length,\n    acceptable: allResults.filter(r => r.json.quality_score >= 60 && r.json.quality_score < 75).length,\n    poor: allResults.filter(r => r.json.quality_score < 60).length\n  },\n  \n  business_intelligence: {\n    business_owners: allResults.filter(r => r.json.owns_business).length,\n    real_estate_investors: allResults.filter(r => r.json.property_count > 1).length,\n    high_net_worth: allResults.filter(r => r.json.estate_value && r.json.estate_value.includes('M')).length,\n    entity_formation_interest: allResults.filter(r => r.json.entity_formation_interest).length\n  },\n  \n  recommendations: []\n};\n\n// Generate batch-level recommendations\nif (summary.average_quality_score < 75) {\n  summary.recommendations.push('Overall quality below target - review extraction prompts');\n}\n\nif (summary.high_urgency_clients > 0) {\n  summary.recommendations.push(`${summary.high_urgency_clients} high-urgency clients need immediate attention`);\n}\n\nif (summary.complex_estates > summary.total_files_processed * 0.3) {\n  summary.recommendations.push('High percentage of complex estates - consider specialized handling');\n}\n\nif (summary.emails_generated < summary.success_count * 0.8) {\n  summary.recommendations.push('Email generation rate below optimal - review email orchestrator');\n}\n\nconsole.log(`\\n🏁 BMAD Batch Processing Complete`);\nconsole.log(`   Session ID: ${sessionId}`);\nconsole.log(`   Files Processed: ${summary.total_files_processed}`);\nconsole.log(`   Success Rate: ${Math.round((summary.success_count / summary.total_files_processed) * 100)}%`);\nconsole.log(`   Average Quality: ${Math.round(summary.average_quality_score)}%`);\nconsole.log(`   Emails Generated: ${summary.emails_generated}`);\nconsole.log(`   Requires Review: ${summary.requires_review_count}`);\nconsole.log(`   High Urgency: ${summary.high_urgency_clients}`);\nconsole.log(`\\n📊 Stage Distribution:`);\nconsole.log(`   Closed Won: ${summary.client_breakdown.closed_won}`);\nconsole.log(`   Follow Up: ${summary.client_breakdown.follow_up}`);\nconsole.log(`   Closed Lost: ${summary.client_breakdown.closed_lost}`);\nconsole.log(`   No Show: ${summary.client_breakdown.no_show}`);\n\nreturn [{ json: summary }];"
+      }
+    },
+    {
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [4080, 150],
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'success',\n  session_id: $json.session_id,\n  files_processed: $json.total_files_processed,\n  success_rate: Math.round(($json.success_count / $json.total_files_processed) * 100) + '%',\n  average_quality: Math.round($json.average_quality_score) + '%',\n  high_priority_clients: $json.high_urgency_clients,\n  emails_generated: $json.emails_generated,\n  completed_at: $json.batch_completed_at\n}) }}"
+      }
+    },
+    {
+      "id": "error-handler",
+      "name": "Global Error Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2100, 450],
+      "parameters": {
+        "functionCode": "// Global error handling for the BMAD pipeline\nconst error = $input.first()?.error || $input.first()?.json?.error;\nconst context = $input.first()?.json || {};\n\nconst errorReport = {\n  error_type: 'pipeline_error',\n  error_message: error?.message || 'Unknown error occurred',\n  error_context: {\n    client_name: context.clientName || context.field_6755 || 'Unknown',\n    file_name: context.fileName || 'Unknown',\n    session_id: context.sessionId || 'Unknown',\n    bmad_stage: context.bmadStage || 'Unknown',\n    timestamp: new Date().toISOString()\n  },\n  recovery_action: 'retry_with_basic_processing',\n  escalation_required: false,\n  error_id: `err_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`\n};\n\n// Determine if escalation is required\nif (error?.message?.includes('API') || error?.message?.includes('timeout')) {\n  errorReport.escalation_required = true;\n  errorReport.recovery_action = 'manual_intervention';\n}\n\nconsole.error(`❌ BMAD Pipeline Error:`);\nconsole.error(`   Client: ${errorReport.error_context.client_name}`);\nconsole.error(`   Stage: ${errorReport.error_context.bmad_stage}`);\nconsole.error(`   Error: ${errorReport.error_message}`);\nconsole.error(`   Error ID: ${errorReport.error_id}`);\n\nreturn [{ json: errorReport }];"
+      }
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [[{"node": "initialization", "type": "main", "index": 0}]]
+    },
+    "manual-trigger": {
+      "main": [[{"node": "initialization", "type": "main", "index": 0}]]
+    },
+    "initialization": {
+      "main": [[{"node": "file-discovery", "type": "main", "index": 0}]]
+    },
+    "file-discovery": {
+      "main": [[{"node": "file-processor", "type": "main", "index": 0}]]
+    },
+    "file-processor": {
+      "main": [[{"node": "batch-creator", "type": "main", "index": 0}]]
+    },
+    "batch-creator": {
+      "main": [[{"node": "batch-processor", "type": "main", "index": 0}]]
+    },
+    "batch-processor": {
+      "main": [[{"node": "file-iterator", "type": "main", "index": 0}]]
+    },
+    "file-iterator": {
+      "main": [[{"node": "file-reader", "type": "main", "index": 0}]]
+    },
+    "file-reader": {
+      "main": [[{"node": "bmad-estate-analyst", "type": "main", "index": 0}]]
+    },
+    "bmad-estate-analyst": {
+      "main": [[{"node": "llm-analysis", "type": "main", "index": 0}]]
+    },
+    "llm-analysis": {
+      "main": [[{"node": "document-validator", "type": "main", "index": 0}]]
+    },
+    "document-validator": {
+      "main": [[{"node": "data-structurer", "type": "main", "index": 0}]]
+    },
+    "data-structurer": {
+      "main": [[{"node": "route-quality", "type": "main", "index": 0}]]
+    },
+    "route-quality": {
+      "main": [
+        [{"node": "save-to-baserow", "type": "main", "index": 0}],
+        [{"node": "quality-review-queue", "type": "main", "index": 0}],
+        [{"node": "failed-processing-handler", "type": "main", "index": 0}]
+      ]
+    },
+    "save-to-baserow": {
+      "main": [[{"node": "email-orchestrator", "type": "main", "index": 0}]]
+    },
+    "email-orchestrator": {
+      "main": [[{"node": "knowledge-extractor", "type": "main", "index": 0}]]
+    },
+    "knowledge-extractor": {
+      "main": [[{"node": "pipeline-manager", "type": "main", "index": 0}]]
+    },
+    "pipeline-manager": {
+      "main": [[{"node": "batch-summary", "type": "main", "index": 0}]]
+    },
+    "batch-summary": {
+      "main": [[{"node": "webhook-response", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "global_error_handler"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "id": "estate-planning",
+      "name": "Estate Planning"
+    },
+    {
+      "id": "bmad-methodology",
+      "name": "BMAD Methodology"
+    },
+    {
+      "id": "production",
+      "name": "Production"
+    }
+  ]
+}

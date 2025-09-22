@@ -1,0 +1,32 @@
+{
+  "llm": {
+    "model": "gpt-oss:20b",
+    "endpoint": "http://localhost:11434/api/generate",
+    "temperature": 0.1,
+    "max_tokens": 2000,
+    "system_prompt": "You are an expert estate planning analyst with 25+ years experience."
+  },
+  "baserow": {
+    "base_url": "http://localhost",
+    "api_token": "h9JNHcGxmXZRIICUjpbHvVcKc5geaASA",
+    "database_id": "174",
+    "table_id": "698",
+    "api_endpoint": "http://localhost/api/database/rows/table/698/"
+  },
+  "transcripts": {
+    "directory": "/Users/joshuavaughan/Library/CloudStorage/GoogleDrive-jvaughan27@gmail.com/.shortcut-targets-by-id/1oyouGXIJLyId2y2H-JJVYay9GFpnLTDK/McAdams Transcripts",
+    "file_pattern": "*.txt",
+    "batch_size": 10,
+    "total_files": 352
+  },
+  "webhook": {
+    "production": "http://localhost:5678/webhook/bmad-estate-planning",
+    "test": "http://localhost:5678/webhook-test/bmad-estate-planning"
+  },
+  "processing": {
+    "parallel_batches": 3,
+    "retry_attempts": 3,
+    "quality_threshold": 75,
+    "auto_approve_threshold": 90
+  }
+}

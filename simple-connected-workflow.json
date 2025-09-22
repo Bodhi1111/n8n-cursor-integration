@@ -1,0 +1,186 @@
+{
+  "name": "BMAD Estate Simple Connected",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5a6e3a3d-5b55-4f8d-b8f1-86e7c8b8a9e5",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "transcript_path",
+              "value": "/Users/joshuavaughan/Library/CloudStorage/GoogleDrive-jvaughan27@gmail.com/.shortcut-targets-by-id/1oyouGXIJLyId2y2H-JJVYay9GFpnLTDK/McAdams Transcripts/THOMAS EDWARDS: Estate Planning Advisor Meeting.txt"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b7c89d12-3f45-4a8e-9e5f-5a2f8b9c1d3e",
+      "name": "Set File Path",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{$json[\"transcript_path\"]}}"
+      },
+      "id": "c9d78e23-4b56-4b9f-a0f6-6b3f9c0d2e4f",
+      "name": "Read File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "mode": "jsonToBinary",
+        "convertAllData": false,
+        "sourceKey": "data",
+        "destinationKey": "data",
+        "options": {
+          "encoding": "utf8"
+        }
+      },
+      "id": "d1e89f34-5c67-5ca0-b1f7-7c4f0d1e3f50",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-oss:20b\",\"prompt\":\"Extract estate planning data from this transcript. Return ONLY JSON with these fields: client_name, meeting_stage, estate_value, urgency_score (1-10).\\n\\nTranscript: {{$json.data.substring(0,2000)}}\",\"temperature\":0.1,\"stream\":false}",
+        "options": {}
+      },
+      "id": "e2f90045-6d78-6db1-c2f8-8d5f1e2f4061",
+      "name": "GPT Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{JSON.parse($json.response)}}",
+        "options": {}
+      },
+      "id": "f3fa1156-7e89-7ec2-d3f9-9e6f2f3f5172",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost/api/database/rows/table/698/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token h9JNHcGxmXZRIICUjpbHvVcKc5geaASA"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"field_6755\":\"{{$json.client_name || 'Test Client'}}\",\"field_6764\":{{$json.urgency_score || 5}},\"field_6759\":{{$json.estate_value || 0}}}",
+        "options": {}
+      },
+      "id": "04fa2267-8f90-8fd3-e4fa-ae7f3f4f6283",
+      "name": "Save to Baserow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1440, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set File Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set File Path": {
+      "main": [
+        [
+          {
+            "node": "Read File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read File": {
+      "main": [
+        [
+          {
+            "node": "Extract Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [
+          {
+            "node": "GPT Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Save to Baserow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2f7e1c43-8555-4e32-ba13-5f0c8b8a9e7f",
+  "id": "99",
+  "meta": {
+    "instanceId": "8c8c5237b8e37b006a7adce87f4369350c58e41b3ab8b3cd6f03172f4f84c4eb"
+  },
+  "tags": []
+}

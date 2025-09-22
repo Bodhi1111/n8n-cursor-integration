@@ -1,0 +1,61 @@
+{
+  "summary": {
+    "processed": 10,
+    "successful": 0,
+    "failed": 10,
+    "startTime": 1758504840730
+  },
+  "duration": 153,
+  "results": [
+    {
+      "file": "Abbot Ware: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "Request failed with status code 400"
+    },
+    {
+      "file": "Adele Nicols: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "Request failed with status code 400"
+    },
+    {
+      "file": "Alan Kassof: Estate Planning Advisor Meeting (1).txt",
+      "success": false,
+      "error": "No JSON found in AI response"
+    },
+    {
+      "file": "Alan Kassof: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "Request failed with status code 400"
+    },
+    {
+      "file": "Alan Reinhard: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "No JSON found in AI response"
+    },
+    {
+      "file": "Alix Alexander: Estate Planning Advisor Meeting .txt",
+      "success": false,
+      "error": "No JSON found in AI response"
+    },
+    {
+      "file": "Amanda Jennings: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "Request failed with status code 400"
+    },
+    {
+      "file": "Ana Vrublevskaja: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "Request failed with status code 400"
+    },
+    {
+      "file": "Angela Canaday: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "No JSON found in AI response"
+    },
+    {
+      "file": "Angela Curtis: Estate Planning Advisor Meeting.txt",
+      "success": false,
+      "error": "Request failed with status code 400"
+    }
+  ]
+}
