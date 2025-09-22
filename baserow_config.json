@@ -1,0 +1,15 @@
+{
+  "baserow": {
+    "base_url": "http://localhost",
+    "database_id": "174",
+    "token": "h9JNHcGxmXZRIICUjpbHvVcKc5geaASA",
+    "tables": {
+      "CRM": {
+        "id": "698",
+        "fields": {
+          "Name": 6755
+        }
+      }
+    }
+  }
+}

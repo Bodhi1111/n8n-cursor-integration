@@ -22,7 +22,21 @@
     "batch:analyze": "node scripts/batch-processor-helper.js analyze",
     "batch:prepare": "node scripts/batch-processor-helper.js prepare",
     "batch:report": "node scripts/batch-processor-helper.js report",
-    "batch:validate": "node scripts/batch-processor-helper.js validate"
+    "batch:validate": "node scripts/batch-processor-helper.js validate",
+    "bmad": "node scripts/bmad-agent-runner.js",
+    "bmad:orchestrator": "npx bmad-method bmad-orchestrator",
+    "bmad:master": "npx bmad-method bmad-master",
+    "bmad:status": "node scripts/bmad-agent-runner.js status",
+    "bmad:help": "node scripts/bmad-agent-runner.js",
+    "bmad:analyst": "node agents/estate-planning-analyst.js",
+    "bmad:validator": "node agents/document-validator.js",
+    "bmad:bridge": "node agents/bmad-n8n-bridge.js",
+    "process:single": "node agents/bmad-n8n-bridge.js process",
+    "process:batch": "node agents/bmad-n8n-bridge.js batch",
+    "health:check": "node agents/bmad-n8n-bridge.js health",
+    "deploy:crm": "python3 deploy_bmad_crm.py",
+    "monitor:start": "python3 bmad_auto_monitor.py",
+    "setup:baserow": "python3 setup_crm_fields.py"
   },
   "keywords": [
     "n8n",
