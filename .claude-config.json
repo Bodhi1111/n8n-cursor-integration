@@ -37,12 +37,16 @@
       "USE transcript_test_runner.py for new testing needs",
       "MODIFY existing files rather than creating new ones",
       "CHECK .gitignore before creating any files",
-      "ASK before creating files that match test patterns"
+      "ASK before creating files that match test patterns",
+      "REFER to CODEBASE_INDEX.md for project overview",
+      "UNDERSTAND this is a production-ready n8n+BMAD integration platform",
+      "FOCUS on existing components rather than creating new files",
+      "USE existing workflows and scripts when possible"
     ]
   },
   "existing_test_scripts": [
     "test_single_transcript_complete.py",
-    "test_full_pipeline.py", 
+    "test_full_pipeline.py",
     "test_connections.py",
     "test_minimal_baserow.py",
     "test_gpt_oss.py"
