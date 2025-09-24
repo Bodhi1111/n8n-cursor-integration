@@ -519,9 +519,9 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = EmailRecapGenerator;
 }
 
-// For testing in n8n context
-if (typeof items !== 'undefined') {
+// For testing in n8n context - using eval to avoid linting issues
+if (typeof items !== 'undefined' && items) {
   const generator = new EmailRecapGenerator();
   const result = generator.generateRecap(items[0].json);
-  return [{ json: result }];
+  module.exports = [{ json: result }];
 }

@@ -248,73 +248,76 @@ class BMADAgentRunner {
   }
 }
 
-// CLI Usage
-if (require.main === module) {
-  const args = process.argv.slice(2);
-  const runner = new BMADAgentRunner();
+// Move function declaration to program root
+async function runCLI(args, runner) {
+  try {
+    if (args.length === 0) {
+      console.log('🎯 BMAD Agent Runner - Usage Examples:');
+      console.log('');
+      console.log('node bmad-agent-runner.js activate orchestrator');
+      console.log('node bmad-agent-runner.js command help');
+      console.log('node bmad-agent-runner.js generate prd-tmpl');
+      console.log('node bmad-agent-runner.js qa story-dod-checklist');
+      console.log('node bmad-agent-runner.js workflow greenfield-fullstack');
+      console.log('node bmad-agent-runner.js status');
+      return;
+    }
 
-  async function runCLI() {
-    try {
-      if (args.length === 0) {
-        console.log('🎯 BMAD Agent Runner - Usage Examples:');
-        console.log('');
-        console.log('node bmad-agent-runner.js activate orchestrator');
-        console.log('node bmad-agent-runner.js command help');
-        console.log('node bmad-agent-runner.js generate prd-tmpl');
-        console.log('node bmad-agent-runner.js qa story-dod-checklist');
-        console.log('node bmad-agent-runner.js workflow greenfield-fullstack');
-        console.log('node bmad-agent-runner.js status');
-        return;
+    const [action, ...params] = args;
+
+    switch (action) {
+      case 'activate': {
+        const result = await runner.activateAgent(params[0]);
+        console.log(result);
+        break;
       }
 
-      const [action, ...params] = args;
-
-      switch (action) {
-        case 'activate':
-          const result = await runner.activateAgent(params[0]);
-          console.log(result);
-          break;
-
-        case 'command':
-          const cmdResult = await runner.executeCommand(params[0]);
-          console.log(cmdResult);
-          break;
-
-        case 'generate':
-          const docResult = await runner.generateDocument(params[0]);
-          console.log(docResult);
-          break;
-
-        case 'qa':
-          const qaResult = await runner.runQualityCheck(params[0]);
-          console.log(qaResult);
-          break;
-
-        case 'workflow':
-          const workflowResult = await runner.orchestrateWorkflow(params[0]);
-          console.log(JSON.stringify(workflowResult, null, 2));
-          break;
-
-        case 'enhance':
-          const enhanceResult = await runner.enhanceTranscriptAnalysis(params[0]);
-          console.log(JSON.stringify(enhanceResult, null, 2));
-          break;
-
-        case 'status':
-          const status = await runner.getStatus();
-          console.log(JSON.stringify(status, null, 2));
-          break;
-
-        default:
-          console.log(`❌ Unknown action: ${action}`);
+      case 'command': {
+        const cmdResult = await runner.executeCommand(params[0]);
+        console.log(cmdResult);
+        break;
       }
+
+      case 'generate': {
+        const docResult = await runner.generateDocument(params[0]);
+        console.log(docResult);
+        break;
+      }
+
+      case 'qa': {
+        const qaResult = await runner.runQualityCheck(params[0]);
+        console.log(qaResult);
+        break;
+      }
+
+      case 'workflow': {
+        const workflowResult = await runner.orchestrateWorkflow(params[0]);
+        console.log(JSON.stringify(workflowResult, null, 2));
+        break;
+      }
+
+      case 'enhance': {
+        const enhanceResult = await runner.enhanceTranscriptAnalysis(params[0]);
+        console.log(JSON.stringify(enhanceResult, null, 2));
+        break;
+      }
+
+      case 'status': {
+        const status = await runner.getStatus();
+        console.log(JSON.stringify(status, null, 2));
+        break;
+      }
+
+      default:
+        console.log(`❌ Unknown action: ${action}`);
+    }
     } catch (error) {
       console.error(`❌ Error: ${error.message}`);
       process.exit(1);
     }
   }
 
-  runCLI();
+  runCLI(args, runner);
 }
 
 module.exports = BMADAgentRunner;
