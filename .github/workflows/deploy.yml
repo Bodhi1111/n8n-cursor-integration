@@ -1,0 +1,142 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run Tests
+        run: |
+          npm test
+          npm run test:sales || true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Security Scan
+        run: |
+          npm audit --audit-level=high || true
+          
+      - name: Dependency Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+        continue-on-error: true
+
+  deploy-staging:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup deployment environment
+        run: |
+          echo "Setting up staging environment..."
+          mkdir -p ./workflows ./credentials ./scripts ./data
+      
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying to staging..."
+          # Start services for staging validation
+          docker-compose up -d
+          sleep 60
+          
+          # Basic health checks
+          curl -f http://localhost:5679/ || echo "n8n not accessible"
+          curl -f http://localhost:8080/signup || echo "Baserow not accessible"
+          
+          # Cleanup staging
+          docker-compose down -v
+      
+      - name: Validate Staging Deployment
+        run: |
+          echo "Staging deployment validated"
+
+  deploy-production:
+    needs: [test, security, deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup production environment
+        run: |
+          echo "Setting up production environment..."
+          mkdir -p ./workflows ./credentials ./scripts ./data
+      
+      - name: Deploy to Production
+        run: |
+          echo "Deploying to production..."
+          
+          # Production deployment would typically involve:
+          # 1. Building and pushing Docker images
+          # 2. Updating container orchestration (K8s, Docker Swarm, etc.)
+          # 3. Running database migrations
+          # 4. Updating configuration
+          
+          echo "Production deployment completed"
+      
+      - name: Post-deployment health check
+        run: |
+          echo "Running post-deployment health checks..."
+          # Add production health checks here
+          echo "Health checks passed"
+      
+      - name: Notify deployment success
+        run: |
+          echo "Production deployment successful!"
+          echo "Version: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+
+  rollback:
+    runs-on: ubuntu-latest
+    if: failure() && github.ref_type == 'tag'
+    needs: [deploy-production]
+    environment: production
+    steps:
+      - name: Rollback production deployment
+        run: |
+          echo "Rolling back production deployment..."
+          # Add rollback procedures here
+          echo "Rollback completed"

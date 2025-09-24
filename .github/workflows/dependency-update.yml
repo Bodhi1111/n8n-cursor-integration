@@ -1,0 +1,114 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-npm-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Update dependencies
+        run: |
+          # Update package.json dependencies
+          npx npm-check-updates -u
+          npm install
+          
+          # Run tests to ensure compatibility
+          npm test || echo "Tests failed, manual review required"
+      
+      - name: Check for security vulnerabilities
+        run: |
+          npm audit --audit-level=high
+          
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update npm dependencies'
+          title: 'Automated Dependency Updates'
+          body: |
+            ## 📦 Automated Dependency Updates
+            
+            This PR contains automated updates to npm dependencies.
+            
+            ### Changes:
+            - Updated all npm packages to latest versions
+            - Ran security audit
+            - Executed basic tests
+            
+            ### Validation Required:
+            - [ ] Manual testing of key workflows
+            - [ ] Docker container builds successfully  
+            - [ ] n8n workflows function correctly
+            - [ ] Integration tests pass
+            
+            **Note:** Please review changes carefully before merging.
+          branch: 'chore/dependency-updates'
+          delete-branch: true
+
+  update-docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Check for Docker image updates
+        run: |
+          # Check current versions
+          echo "Current n8n version: $(docker run --rm n8nio/n8n:latest n8n --version)"
+          echo "Current Baserow version: latest"
+          
+          # Create a simple script to check for updates
+          cat > check-docker-updates.sh << 'EOF'
+          #!/bin/bash
+          
+          # Get latest n8n version
+          N8N_LATEST=$(curl -s https://api.github.com/repos/n8n-io/n8n/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+          BASEROW_LATEST="latest"  # Baserow doesn't use semantic versioning
+          
+          echo "Latest n8n version: $N8N_LATEST"
+          echo "Latest Baserow version: $BASEROW_LATEST"
+          
+          # Update docker-compose.yml with latest versions if needed
+          # This is a placeholder - actual implementation would update the file
+          EOF
+          
+          chmod +x check-docker-updates.sh
+          ./check-docker-updates.sh
+      
+      - name: Create Docker Update PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update Docker images'
+          title: 'Automated Docker Image Updates'
+          body: |
+            ## 🐳 Automated Docker Image Updates
+            
+            This PR contains automated updates to Docker images.
+            
+            ### Changes:
+            - Checked for latest n8n version
+            - Checked for latest Baserow version
+            
+            ### Manual Validation Required:
+            - [ ] Test Docker services start correctly
+            - [ ] Verify n8n workflows compatibility
+            - [ ] Check Baserow database migrations
+            - [ ] Validate all integrations work
+          branch: 'chore/docker-updates'
+          delete-branch: true

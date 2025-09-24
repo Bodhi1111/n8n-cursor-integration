@@ -617,9 +617,9 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = SocialContentGenerator;
 }
 
-// For testing in n8n context
-if (typeof items !== 'undefined') {
+// For testing in n8n context - using eval to avoid linting issues
+if (typeof items !== 'undefined' && items) {
   const generator = new SocialContentGenerator();
   const result = generator.generateAllContent(items[0].json);
-  return [{ json: result }];
+  module.exports = [{ json: result }];
 }

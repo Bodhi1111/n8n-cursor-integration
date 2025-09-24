@@ -350,7 +350,7 @@ Here's the extracted sales data:
 
     try {
       // Simulate the full workflow
-      let data = { ...this.mockTranscript };
+      const data = { ...this.mockTranscript };
 
       // Step 1: Extract metadata (already done in mock)
       this.assert(data.companyName === 'TechCorp', 'Company name should be extracted');
